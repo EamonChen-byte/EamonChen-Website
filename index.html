@@ -1964,18 +1964,18 @@ footer .footer-copy{opacity:0.7}
 <script>
 /* ===== Firebase Config (cross-device message board) ===== */
 const firebaseConfig = {
-  apiKey: "AIzaSyD1k2Z8 Example Placeholder Key 0000000000",
-  authDomain: "eamon-website-demo.firebaseapp.com",
-  databaseURL: "https://eamon-website-demo-default-rtdb.firebaseio.com",
-  projectId: "eamon-website-demo",
-  storageBucket: "eamon-website-demo.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:0000000000000000000000"
+  apiKey: "AIzaSyBp1GZu2WHJN0KbS6z0quxr-hIT_6QVPWU",
+  authDomain: "eamon-website.firebaseapp.com",
+  databaseURL: "https://eamon-website-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "eamon-website",
+  storageBucket: "eamon-website.firebasestorage.app",
+  messagingSenderId: "238670882890",
+  appId: "1:238670882890:web:e86eed464859cf6ca15eb3"
 };
 let db = null;
 let useFirebase = false;
 try {
-  if (typeof firebase !== 'undefined' && firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('Placeholder')) {
+  if (typeof firebase !== 'undefined' && firebaseConfig.databaseURL) {
     firebase.initializeApp(firebaseConfig);
     db = firebase.database();
     useFirebase = true;
