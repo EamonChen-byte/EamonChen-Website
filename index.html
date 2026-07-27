@@ -1863,7 +1863,7 @@ footer .footer-copy{opacity:0.7}
         <div class="match-start" id="matchStart">
           <div class="match-icon">🔮</div>
           <h3>三合一玄学契合度</h3>
-          <p class="match-desc">星座 × MBTI × 生辰密码<br/>输入你的信息，看看我们的缘分指数</p>
+          <p class="match-desc">星座 × MBTI × 生辰密码<br/>输入你的信息，看看你和陈一铭的缘分指数</p>
           <button class="match-btn" onclick="startMatch()">开始测算</button>
         </div>
         <!-- Form -->
@@ -1928,7 +1928,7 @@ footer .footer-copy{opacity:0.7}
         <!-- Result -->
         <div class="match-result" id="matchResult">
           <div class="match-percent" id="matchPercent">0%</div>
-          <div class="match-percent-label">缘分契合度</div>
+          <div class="match-percent-label">你和陈一铭的契合度</div>
           <div class="match-result-tag" id="matchTag">加载中...</div>
           <div class="match-dimensions" id="matchDimensions"></div>
           <button class="match-retry-btn" onclick="resetMatch()">再测一次</button>
@@ -1959,7 +1959,29 @@ footer .footer-copy{opacity:0.7}
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
+/* ===== Firebase Config (cross-device message board) ===== */
+const firebaseConfig = {
+  apiKey: "AIzaSyD1k2Z8 Example Placeholder Key 0000000000",
+  authDomain: "eamon-website-demo.firebaseapp.com",
+  databaseURL: "https://eamon-website-demo-default-rtdb.firebaseio.com",
+  projectId: "eamon-website-demo",
+  storageBucket: "eamon-website-demo.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:0000000000000000000000"
+};
+let db = null;
+let useFirebase = false;
+try {
+  if (typeof firebase !== 'undefined' && firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('Placeholder')) {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    useFirebase = true;
+  }
+} catch(e) { console.warn('Firebase init skipped:', e.message); }
+
 /* ===== Top Nav scroll behavior ===== */
 const topnav = document.getElementById('topnav');
 const sections = document.querySelectorAll('section[id],header[id]');
@@ -1987,15 +2009,15 @@ window.addEventListener('scroll', () => {
   });
 });
 
-/* ===== Thoughts Blog ===== */
+/* ===== Thoughts Blog (Firebase real-time + localStorage fallback) ===== */
 const THOUGHTS_KEY = 'eamon_thoughts';
-let thoughtsData = JSON.parse(localStorage.getItem(THOUGHTS_KEY) || '{}');
+let thoughtsData = {};
 let currentEdit = null;
 let pendingAttachments = [];
 
 function getThoughts(cat) { return (thoughtsData[cat] || []).sort((a,b) => b.ts - a.ts); }
 
-function saveThoughts() { localStorage.setItem(THOUGHTS_KEY, JSON.stringify(thoughtsData)); }
+function saveThoughtsLocal() { localStorage.setItem(THOUGHTS_KEY, JSON.stringify(thoughtsData)); }
 
 function getFileIcon(type, name) {
   if (type && type.startsWith('image/')) return '🖼️';
@@ -2031,6 +2053,7 @@ function renderAttachments(atts, inArticle) {
 
 function renderPanel(cat) {
   const panel = document.getElementById('panel-' + cat);
+  if (!panel) return;
   const posts = getThoughts(cat);
   if (!posts.length) {
     panel.innerHTML = '<div class="thought-empty">Coming Soon</div>';
@@ -2039,7 +2062,7 @@ function renderPanel(cat) {
   panel.innerHTML = posts.map((p) => {
     const d = new Date(p.ts);
     const dateStr = d.getFullYear() + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getDate()).padStart(2,'0');
-    return '<div class="thought-article" onclick="openThought(\'' + cat + '\',' + p.ts + ')">' +
+    return '<div class="thought-article" onclick="openThought(\'' + cat + '\',' + p.ts + ')" data-ts="' + p.ts + '">' +
       '<div class="thought-article-meta"><span>' + dateStr + '</span>' +
       '<div class="thought-article-actions">' +
       '<button onclick="event.stopPropagation();editThought(\'' + cat + '\',' + p.ts + ')">编辑</button>' +
@@ -2054,12 +2077,35 @@ function renderAllPanels() {
   ['ai-use','ai-product','creator','campaign'].forEach(renderPanel);
 }
 
+/* Load thoughts from Firebase (real-time) or localStorage (fallback) */
+function loadThoughts() {
+  if (useFirebase) {
+    db.ref('thoughts').on('value', function(snapshot) {
+      const val = snapshot.val() || {};
+      thoughtsData = val;
+      renderAllPanels();
+    });
+  } else {
+    try { thoughtsData = JSON.parse(localStorage.getItem(THOUGHTS_KEY) || '{}'); } catch(e) { thoughtsData = {}; }
+    if (typeof thoughtsData !== 'object' || Array.isArray(thoughtsData)) thoughtsData = {};
+    renderAllPanels();
+  }
+}
+
 function deleteThought(cat, ts) {
   if (!confirm('确定要删除这篇文章吗？')) return;
-  if (!thoughtsData[cat]) return;
-  thoughtsData[cat] = thoughtsData[cat].filter(p => p.ts !== ts);
-  saveThoughts();
-  renderPanel(cat);
+  if (useFirebase) {
+    db.ref('thoughts/' + cat).once('value').then(function(snap) {
+      const arr = snap.val() || [];
+      const filtered = arr.filter(p => p.ts !== ts);
+      db.ref('thoughts/' + cat).set(filtered);
+    });
+  } else {
+    if (!thoughtsData[cat]) return;
+    thoughtsData[cat] = thoughtsData[cat].filter(p => p.ts !== ts);
+    saveThoughtsLocal();
+    renderPanel(cat);
+  }
   showToast('已删除');
 }
 
@@ -2084,26 +2130,50 @@ function publishThought() {
   const cat = document.querySelector('.writer-category').value;
   if (!title || !content || content === '<br>') { showToast('标题和内容不能为空'); return; }
   if (currentEdit) {
-    const post = (thoughtsData[currentEdit.cat] || []).find(p => p.ts === currentEdit.ts);
-    if (post) {
-      post.title = title;
-      post.content = content;
-      post.attachments = pendingAttachments.length ? pendingAttachments : undefined;
-      post.updatedAt = Date.now();
-      saveThoughts();
-      renderPanel(currentEdit.cat);
-      showToast('修改成功');
+    if (useFirebase) {
+      db.ref('thoughts/' + currentEdit.cat).once('value').then(function(snap) {
+        const arr = snap.val() || [];
+        const idx = arr.findIndex(p => p.ts === currentEdit.ts);
+        if (idx !== -1) {
+          arr[idx].title = title;
+          arr[idx].content = content;
+          arr[idx].attachments = pendingAttachments.length ? pendingAttachments : null;
+          arr[idx].updatedAt = Date.now();
+          db.ref('thoughts/' + currentEdit.cat).set(arr);
+        }
+        showToast('修改成功');
+      });
+    } else {
+      const post = (thoughtsData[currentEdit.cat] || []).find(p => p.ts === currentEdit.ts);
+      if (post) {
+        post.title = title;
+        post.content = content;
+        post.attachments = pendingAttachments.length ? pendingAttachments : undefined;
+        post.updatedAt = Date.now();
+        saveThoughtsLocal();
+        renderPanel(currentEdit.cat);
+        showToast('修改成功');
+      }
     }
     currentEdit = null;
     document.querySelector('.writer-publish').textContent = '发布';
   } else {
-    if (!thoughtsData[cat]) thoughtsData[cat] = [];
     const newPost = { title, content, ts: Date.now() };
     if (pendingAttachments.length) newPost.attachments = pendingAttachments;
-    thoughtsData[cat].push(newPost);
-    saveThoughts();
-    renderPanel(cat);
-    showToast('发布成功');
+    if (useFirebase) {
+      db.ref('thoughts/' + cat).once('value').then(function(snap) {
+        const arr = snap.val() || [];
+        arr.push(newPost);
+        db.ref('thoughts/' + cat).set(arr);
+        showToast('发布成功');
+      });
+    } else {
+      if (!thoughtsData[cat]) thoughtsData[cat] = [];
+      thoughtsData[cat].push(newPost);
+      saveThoughtsLocal();
+      renderPanel(cat);
+      showToast('发布成功');
+    }
   }
   document.querySelector('.writer-title').value = '';
   document.querySelector('.editor-content').innerHTML = '';
@@ -2151,11 +2221,12 @@ document.querySelectorAll('.thoughts-tab').forEach(tab => {
     document.querySelectorAll('.thoughts-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.thoughts-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
-    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    var panel = document.getElementById('panel-' + tab.dataset.tab);
+    if (panel) panel.classList.add('active');
   });
 });
 
-renderAllPanels();
+loadThoughts();
 
 /* ===== Thought Modal ===== */
 function openThought(cat, ts) {
@@ -2279,23 +2350,18 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2400);
 }
 
-/* ===== Notes (with localStorage) ===== */
+/* ===== Notes (Firebase real-time + localStorage fallback) ===== */
 const NOTES_KEY = 'eamon_notes';
 let notesData = [];
 
 function saveNotes() { localStorage.setItem(NOTES_KEY, JSON.stringify(notesData)); }
-
-function loadNotes() {
-  try { notesData = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch(e) { notesData = []; }
-  if (!Array.isArray(notesData)) notesData = [];
-  notesData.forEach(note => renderNoteCard(note));
-}
 
 function renderNoteCard(note) {
   const card = document.createElement('div');
   card.className = 'note-card pin fade in';
   card.style.cssText = `--rot:${note.rot}deg`;
   card.dataset.ts = note.ts;
+  if (note.id) card.dataset.id = note.id;
   let emojiHtml = '<div class="note-emoji-bar">';
   ['👍','🔥','😂'].forEach(e => {
     const count = (note.emojis && note.emojis[e]) || 0;
@@ -2303,13 +2369,70 @@ function renderNoteCard(note) {
   });
   emojiHtml += '</div>';
   let repliesHtml = '';
-  if (note.replies && note.replies.length) {
-    note.replies.forEach(r => {
+  let replies = note.replies;
+  if (replies && !Array.isArray(replies)) replies = Object.values(replies);
+  if (replies && replies.length) {
+    replies.forEach(r => {
       repliesHtml += `<div class="note-reply"><span class="reply-text">${r.text.replace(/</g,'&lt;')}</span><span class="reply-from">— Eamon</span><span class="reply-time">${r.time}</span></div>`;
     });
   }
   card.innerHTML = `<div class="q">${note.q.replace(/</g,'&lt;')}</div><div class="from">${note.from ? '— ' + note.from.replace(/</g,'&lt;') : '— 匿名'}</div><div class="note-time">${note.time}</div>${emojiHtml}<button class="note-reply-btn" onclick="replyNote(this)">回复</button>${repliesHtml}`;
   document.getElementById('notesBoard').prepend(card);
+}
+
+/* Real-time update: only refresh emoji counts and add new replies (no full re-render) */
+function updateNoteCard(note) {
+  const card = document.querySelector('.note-card[data-id="' + note.id + '"]');
+  if (!card) return;
+  card.querySelectorAll('.emoji-btn').forEach(b => {
+    const parts = b.textContent.trim().split(' ');
+    const em = parts[0];
+    const count = (note.emojis && note.emojis[em]) || 0;
+    b.textContent = em + ' ' + count;
+  });
+  let replies = note.replies;
+  if (replies && !Array.isArray(replies)) replies = Object.values(replies);
+  if (!replies) replies = [];
+  const existingReplies = card.querySelectorAll('.note-reply').length;
+  const replyBtn = card.querySelector('.note-reply-btn');
+  if (replies.length > existingReplies && replyBtn) {
+    for (let i = existingReplies; i < replies.length; i++) {
+      const r = replies[i];
+      const reply = document.createElement('div');
+      reply.className = 'note-reply';
+      reply.innerHTML = '<span class="reply-text">' + r.text.replace(/</g,'&lt;') + '</span><span class="reply-from">— Eamon</span><span class="reply-time">' + r.time + '</span>';
+      card.insertBefore(reply, replyBtn);
+    }
+    const replyArea = card.querySelector('.note-reply-area');
+    if (replyArea) replyArea.remove();
+  }
+}
+
+function loadNotes() {
+  if (useFirebase) {
+    /* child_added: fires for all existing messages in order, then for new ones */
+    db.ref('messages').orderByChild('ts').on('child_added', function(snapshot) {
+      const note = snapshot.val();
+      note.id = snapshot.key;
+      if (note.replies && !Array.isArray(note.replies)) note.replies = Object.values(note.replies);
+      if (!note.replies) note.replies = [];
+      if (!note.emojis) note.emojis = {};
+      renderNoteCard(note);
+    });
+    /* child_changed: fires when a message is updated (replies, emoji likes) */
+    db.ref('messages').on('child_changed', function(snapshot) {
+      const note = snapshot.val();
+      note.id = snapshot.key;
+      if (note.replies && !Array.isArray(note.replies)) note.replies = Object.values(note.replies);
+      if (!note.replies) note.replies = [];
+      if (!note.emojis) note.emojis = {};
+      updateNoteCard(note);
+    });
+  } else {
+    try { notesData = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch(e) { notesData = []; }
+    if (!Array.isArray(notesData)) notesData = [];
+    notesData.forEach(note => renderNoteCard(note));
+  }
 }
 
 function addNote() {
@@ -2320,9 +2443,13 @@ function addNote() {
   const now = new Date();
   const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   const note = { q, from, time: timeStr, rot, ts: Date.now(), replies: [], emojis: {} };
-  notesData.unshift(note);
-  saveNotes();
-  renderNoteCard(note);
+  if (useFirebase) {
+    db.ref('messages').push().set(note);
+  } else {
+    notesData.unshift(note);
+    saveNotes();
+    renderNoteCard(note);
+  }
   document.getElementById('noteInput').value = '';
   document.getElementById('noteFrom').value = '';
   showToast('贴上去了');
@@ -2353,17 +2480,21 @@ function submitReply(btn) {
   if (!text) return;
   const now = new Date();
   const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  const reply = document.createElement('div');
-  reply.className = 'note-reply';
-  reply.innerHTML = '<span class="reply-text">' + text.replace(/</g,'&lt;') + '</span><span class="reply-from">— Eamon</span><span class="reply-time">' + timeStr + '</span>';
-  area.replaceWith(reply);
-  /* save reply to localStorage */
-  const ts = parseInt(card.dataset.ts);
-  const note = notesData.find(n => n.ts === ts);
-  if (note) {
-    if (!note.replies) note.replies = [];
-    note.replies.push({ text, time: timeStr });
-    saveNotes();
+  if (useFirebase && card.dataset.id) {
+    db.ref('messages/' + card.dataset.id + '/replies').push().set({ text, time: timeStr });
+    area.remove();
+  } else {
+    const reply = document.createElement('div');
+    reply.className = 'note-reply';
+    reply.innerHTML = '<span class="reply-text">' + text.replace(/</g,'&lt;') + '</span><span class="reply-from">— Eamon</span><span class="reply-time">' + timeStr + '</span>';
+    area.replaceWith(reply);
+    const ts = parseInt(card.dataset.ts);
+    const note = notesData.find(n => n.ts === ts);
+    if (note) {
+      if (!note.replies) note.replies = [];
+      note.replies.push({ text, time: timeStr });
+      saveNotes();
+    }
   }
   showToast('已回复');
 }
@@ -2381,8 +2512,10 @@ function pickEmoji(btn, emoji) {
     btn.classList.add('picked');
   }
   btn.textContent = em + ' ' + count;
-  /* save emoji state to localStorage */
-  if (card && card.dataset.ts) {
+  if (useFirebase && card.dataset.id) {
+    /* Write to Firebase — all devices see the update in real-time */
+    db.ref('messages/' + card.dataset.id + '/emojis/' + em).set(count);
+  } else if (card && card.dataset.ts) {
     const ts = parseInt(card.dataset.ts);
     const note = notesData.find(n => n.ts === ts);
     if (note) {
@@ -2548,8 +2681,8 @@ const playBtn = document.getElementById('playBtn');
 function loadTrack(i) {
   currentTrack = i;
   const t = playlist[i];
-  pSong.textContent = t.song;
-  pArtist.textContent = t.artist;
+  if (pSong) pSong.textContent = t.song;
+  if (pArtist) pArtist.textContent = t.artist;
   audioLoaded = false;
   updateProgress();
 }
@@ -2558,7 +2691,8 @@ function updateProgress() {
   const ct = audio.currentTime || 0;
   const dur = audio.duration || 1;
   const pct = (ct / dur) * 100;
-  pBar.style.width = Math.min(pct, 100) + '%';
+  if (pBar) pBar.style.width = Math.min(pct, 100) + '%';
+  if (!pTime) return;
   const cm = Math.floor(ct / 60);
   const cs = Math.floor(ct % 60);
   const dm = Math.floor(dur / 60);
@@ -2583,9 +2717,10 @@ function togglePlay() {
 
 function play() {
   isPlaying = true;
-  playBtn.textContent = '⏸';
-  disc.classList.add('playing');
-  document.getElementById('pHint').classList.add('hide');
+  if (playBtn) playBtn.textContent = '⏸';
+  if (disc) disc.classList.add('playing');
+  var pHint = document.getElementById('pHint');
+  if (pHint) pHint.classList.add('hide');
   if (!audioLoaded) {
     audio.src = playlist[currentTrack].src;
     audio.load();
@@ -2601,8 +2736,8 @@ function play() {
 
 function pause() {
   isPlaying = false;
-  playBtn.textContent = '▶';
-  disc.classList.remove('playing');
+  if (playBtn) playBtn.textContent = '▶';
+  if (disc) disc.classList.remove('playing');
   audio.pause();
   audio.oncanplaythrough = null;
 }
@@ -2619,12 +2754,15 @@ function prev() {
   play();
 }
 
-playBtn.addEventListener('click', togglePlay);
-document.getElementById('nextBtn').addEventListener('click', next);
-document.getElementById('prevBtn').addEventListener('click', prev);
+if(playBtn) playBtn.addEventListener('click', togglePlay);
+var _nextBtn = document.getElementById('nextBtn');
+if(_nextBtn) _nextBtn.addEventListener('click', next);
+var _prevBtn = document.getElementById('prevBtn');
+if(_prevBtn) _prevBtn.addEventListener('click', prev);
 
 // progress bar click seek
-document.getElementById('progress').addEventListener('click', (e) => {
+var _progress = document.getElementById('progress');
+if(_progress) _progress.addEventListener('click', (e) => {
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
   const dur = audio.duration || 1;
@@ -2801,21 +2939,21 @@ function showMatchResult(birth, zodiac, mbti) {
       title: '星座能量',
       score: zScore,
       color: 'var(--accent)',
-      desc: '你的' + zName + '与运营人的星座磁场' + (zScore >= 80 ? '高度共振，你们在天性上就有很多共鸣。' : zScore >= 70 ? '相处融洽，星座特质互补。' : '虽然星座属性不同，但差异也是一种吸引力。')
+      desc: '你的' + zName + '与陈一铭的星座磁场' + (zScore >= 80 ? '高度共振，你们在天性上就有很多共鸣。' : zScore >= 70 ? '相处融洽，星座特质互补。' : '虽然星座属性不同，但差异也是一种吸引力。')
     },
     {
       icon: '🧠',
       title: 'MBTI 契合',
       score: mScore,
       color: '#4fb0ff',
-      desc: mName + '在思维方式上与运营工作' + (mScore >= 80 ? '天然适配，你们的思维模式非常接近。' : mScore >= 70 ? '有不错的契合度，能互相理解。' : '有不同的思考角度，正好可以互相补充。')
+      desc: mName + '在思维方式上与陈一铭' + (mScore >= 80 ? '天然适配，你们的思维模式非常接近。' : mScore >= 70 ? '有不错的契合度，能互相理解。' : '有不同的思考角度，正好可以互相补充。')
     },
     {
       icon: '📿',
       title: '生辰密码',
       score: dScore,
       color: '#2997ff',
-      desc: '生肖「' + animal + '」· 生命灵数「' + lifeNum + '」· 你的命理特质' + (dScore >= 80 ? '与运营人的气场高度匹配。' : dScore >= 70 ? '和运营人的能量场相处和谐。' : '与运营人形成了有趣的互补格局。')
+      desc: '生肖「' + animal + '」· 生命灵数「' + lifeNum + '」· 你的命理特质' + (dScore >= 80 ? '与陈一铭的气场高度匹配。' : dScore >= 70 ? '和陈一铭的能量场相处和谐。' : '与陈一铭形成了有趣的互补格局。')
     }
   ];
 
@@ -2889,7 +3027,7 @@ function cinemaNav(dir) {
 // cinema keyboard nav
 document.addEventListener('keydown', function(e){
   var ov = document.getElementById('cinemaOverlay');
-  if (!ov.classList.contains('open')) return;
+  if (!ov || !ov.classList.contains('open')) return;
   if (e.key === 'Escape') closeCinema();
   if (e.key === 'ArrowLeft') cinemaNav(-1);
   if (e.key === 'ArrowRight') cinemaNav(1);
