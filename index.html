@@ -2260,19 +2260,50 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2400);
 }
 
-/* ===== Notes ===== */
+/* ===== Notes (with localStorage) ===== */
+const NOTES_KEY = 'eamon_notes';
+let notesData = [];
+
+function saveNotes() { localStorage.setItem(NOTES_KEY, JSON.stringify(notesData)); }
+
+function loadNotes() {
+  try { notesData = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch(e) { notesData = []; }
+  if (!Array.isArray(notesData)) notesData = [];
+  notesData.forEach(note => renderNoteCard(note));
+}
+
+function renderNoteCard(note) {
+  const card = document.createElement('div');
+  card.className = 'note-card pin fade in';
+  card.style.cssText = `--rot:${note.rot}deg`;
+  card.dataset.ts = note.ts;
+  let emojiHtml = '<div class="note-emoji-bar">';
+  ['👍','🔥','😂'].forEach(e => {
+    const count = (note.emojis && note.emojis[e]) || 0;
+    emojiHtml += `<button class="emoji-btn" onclick="pickEmoji(this,'${e}')">${e} ${count}</button>`;
+  });
+  emojiHtml += '</div>';
+  let repliesHtml = '';
+  if (note.replies && note.replies.length) {
+    note.replies.forEach(r => {
+      repliesHtml += `<div class="note-reply"><span class="reply-text">${r.text.replace(/</g,'&lt;')}</span><span class="reply-from">— Eamon</span><span class="reply-time">${r.time}</span></div>`;
+    });
+  }
+  card.innerHTML = `<div class="q">${note.q.replace(/</g,'&lt;')}</div><div class="from">${note.from ? '— ' + note.from.replace(/</g,'&lt;') : '— 匿名'}</div><div class="note-time">${note.time}</div>${emojiHtml}<button class="note-reply-btn" onclick="replyNote(this)">回复</button>${repliesHtml}`;
+  document.getElementById('notesBoard').prepend(card);
+}
+
 function addNote() {
   const q = document.getElementById('noteInput').value.trim();
   const from = document.getElementById('noteFrom').value.trim();
   if (!q) { showToast('写点什么再贴上去呀'); return; }
-  const rot = (Math.random() * 3 - 1.5).toFixed(1);
+  const rot = parseFloat((Math.random() * 3 - 1.5).toFixed(1));
   const now = new Date();
   const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  const card = document.createElement('div');
-  card.className = 'note-card pin fade in';
-  card.style.cssText = `--rot:${rot}deg`;
-  card.innerHTML = `<div class="q">${q.replace(/</g,'&lt;')}</div><div class="from">${from ? '— ' + from.replace(/</g,'&lt;') : '— 匿名'}</div><div class="note-time">${timeStr}</div><div class="note-emoji-bar"><button class="emoji-btn" onclick="pickEmoji(this)">👍 0</button><button class="emoji-btn" onclick="pickEmoji(this)">🔥 0</button><button class="emoji-btn" onclick="pickEmoji(this)">😂 0</button></div><button class="note-reply-btn" onclick="replyNote(this)">回复</button>`;
-  document.getElementById('notesBoard').prepend(card);
+  const note = { q, from, time: timeStr, rot, ts: Date.now(), replies: [], emojis: {} };
+  notesData.unshift(note);
+  saveNotes();
+  renderNoteCard(note);
   document.getElementById('noteInput').value = '';
   document.getElementById('noteFrom').value = '';
   showToast('贴上去了');
@@ -2298,6 +2329,7 @@ function addEmojiToReply(span) {
 
 function submitReply(btn) {
   const area = btn.closest('.note-reply-area');
+  const card = btn.closest('.note-card');
   const text = area.querySelector('input').value.trim();
   if (!text) return;
   const now = new Date();
@@ -2306,12 +2338,21 @@ function submitReply(btn) {
   reply.className = 'note-reply';
   reply.innerHTML = '<span class="reply-text">' + text.replace(/</g,'&lt;') + '</span><span class="reply-from">— Eamon</span><span class="reply-time">' + timeStr + '</span>';
   area.replaceWith(reply);
+  /* save reply to localStorage */
+  const ts = parseInt(card.dataset.ts);
+  const note = notesData.find(n => n.ts === ts);
+  if (note) {
+    if (!note.replies) note.replies = [];
+    note.replies.push({ text, time: timeStr });
+    saveNotes();
+  }
   showToast('已回复');
 }
 
-function pickEmoji(btn) {
+function pickEmoji(btn, emoji) {
+  const card = btn.closest('.note-card');
   const parts = btn.textContent.trim().split(' ');
-  const emoji = parts[0];
+  const em = emoji || parts[0];
   let count = parseInt(parts[1] || 0);
   if (btn.classList.contains('picked')) {
     count = Math.max(0, count - 1);
@@ -2320,8 +2361,21 @@ function pickEmoji(btn) {
     count += 1;
     btn.classList.add('picked');
   }
-  btn.textContent = emoji + ' ' + count;
+  btn.textContent = em + ' ' + count;
+  /* save emoji state to localStorage */
+  if (card && card.dataset.ts) {
+    const ts = parseInt(card.dataset.ts);
+    const note = notesData.find(n => n.ts === ts);
+    if (note) {
+      if (!note.emojis) note.emojis = {};
+      note.emojis[em] = count;
+      saveNotes();
+    }
+  }
 }
+
+/* load saved notes on page load */
+loadNotes();
 
 /* ===== Memory Modal ===== */
 const memories = [
