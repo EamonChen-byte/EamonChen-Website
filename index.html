@@ -2194,47 +2194,66 @@ document.addEventListener('keydown', e => {
 });
 
 /* ===== Rich Text Editor Toolbar ===== */
-document.querySelectorAll('.editor-toolbar .tb-btn[data-cmd]').forEach(btn => {
-  btn.addEventListener('click', e => {
-    e.preventDefault();
-    const cmd = btn.dataset.cmd;
-    document.execCommand(cmd, false, null);
-    document.querySelector('.editor-content').focus();
-    btn.classList.toggle('active');
-    setTimeout(() => updateToolbarState(), 0);
+(function initEditor() {
+  const toolbarBtns = document.querySelectorAll('.editor-toolbar .tb-btn[data-cmd]');
+  toolbarBtns.forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const cmd = btn.dataset.cmd;
+      document.execCommand(cmd, false, null);
+      const editor = document.querySelector('.editor-content');
+      if (editor) editor.focus();
+      btn.classList.toggle('active');
+      setTimeout(() => updateToolbarState(), 0);
+    });
   });
-});
 
-document.querySelector('.tb-select[data-cmd]').addEventListener('change', e => {
-  document.execCommand('fontSize', false, e.target.value);
-  document.querySelector('.editor-content').focus();
-});
+  const sizeSelect = document.querySelector('.tb-select[data-cmd]');
+  if (sizeSelect) {
+    sizeSelect.addEventListener('change', e => {
+      document.execCommand('fontSize', false, e.target.value);
+      const editor = document.querySelector('.editor-content');
+      if (editor) editor.focus();
+    });
+  }
 
-document.querySelector('.tb-color-input').addEventListener('input', e => {
-  document.querySelector('.tb-color-bar').style.background = e.target.value;
-  document.execCommand('foreColor', false, e.target.value);
-  document.querySelector('.editor-content').focus();
-});
-
-document.querySelector('.tb-color').addEventListener('click', e => {
-  if (e.target.tagName === 'INPUT') return;
-  e.preventDefault();
   const colorInput = document.querySelector('.tb-color-input');
-  colorInput.click();
-});
+  if (colorInput) {
+    colorInput.addEventListener('input', e => {
+      const bar = document.querySelector('.tb-color-bar');
+      if (bar) bar.style.background = e.target.value;
+      document.execCommand('foreColor', false, e.target.value);
+      const editor = document.querySelector('.editor-content');
+      if (editor) editor.focus();
+    });
+  }
 
-function updateToolbarState() {
-  document.querySelectorAll('.editor-toolbar .tb-btn[data-cmd]').forEach(btn => {
-    const cmd = btn.dataset.cmd;
-    try {
-      if (document.queryCommandState(cmd)) btn.classList.add('active');
-      else btn.classList.remove('active');
-    } catch(e) {}
-  });
-}
+  const colorBtn = document.querySelector('.tb-color');
+  if (colorBtn) {
+    colorBtn.addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+      const ci = document.querySelector('.tb-color-input');
+      if (ci) ci.click();
+    });
+  }
 
-document.querySelector('.editor-content').addEventListener('keyup', updateToolbarState);
-document.querySelector('.editor-content').addEventListener('mouseup', updateToolbarState);
+  function updateToolbarState() {
+    document.querySelectorAll('.editor-toolbar .tb-btn[data-cmd]').forEach(btn => {
+      const cmd = btn.dataset.cmd;
+      try {
+        if (document.queryCommandState(cmd)) btn.classList.add('active');
+        else btn.classList.remove('active');
+      } catch(e) {}
+    });
+  }
+
+  const editorEl = document.querySelector('.editor-content');
+  if (editorEl) {
+    editorEl.addEventListener('keyup', updateToolbarState);
+    editorEl.addEventListener('mouseup', updateToolbarState);
+  }
+})();
 
 /* ===== Scroll Reveal ===== */
 const io = new IntersectionObserver((entries) => {
