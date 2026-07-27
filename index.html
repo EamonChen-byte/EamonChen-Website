@@ -2894,13 +2894,19 @@ document.addEventListener('keydown', function(e){
   if (e.key === 'ArrowLeft') cinemaNav(-1);
   if (e.key === 'ArrowRight') cinemaNav(1);
 });
-// click backdrop to close
-document.getElementById('cinemaOverlay').addEventListener('click', function(e){
-  if (e.target === this || e.target.classList.contains('cinema-screen')) closeCinema();
+// cinema init (runs after DOM ready because elements are after this script)
+document.addEventListener('DOMContentLoaded', function(){
+  var ov = document.getElementById('cinemaOverlay');
+  if (ov) {
+    ov.addEventListener('click', function(e){
+      if (e.target === this || e.target.classList.contains('cinema-screen')) closeCinema();
+    });
+  }
+  var cImg = document.getElementById('cinemaImg');
+  if (cImg) {
+    cImg.style.transition = 'opacity 0.15s ease, transform 0.25s cubic-bezier(0.25,1,0.5,1)';
+  }
 });
-// cinema img transition
-var cImg = document.getElementById('cinemaImg');
-cImg.style.transition = 'opacity 0.15s ease, transform 0.25s cubic-bezier(0.25,1,0.5,1)';
 
 </script>
 
