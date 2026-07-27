@@ -1,0 +1,11 @@
+# Reference images used during design phase
+ref_*.jpg
+ref_*.png
+
+# macOS system files
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
