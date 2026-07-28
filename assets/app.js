@@ -22,6 +22,7 @@ function loadFirebaseAsync() {
       /* 确保 localStorage 数据已加载 */
       if (typeof loadNotes === 'function') loadNotes();
       if (typeof loadThoughts === 'function') loadThoughts();
+      if (typeof loadFoodReviews === 'function') loadFoodReviews();
       if (typeof initVisitorCounter === 'function') initVisitorCounter();
     }
   }, 8000);
@@ -104,6 +105,412 @@ function initVisitorCounter() {
   });
 }
 
+/* ===== Food Review (探店红黑榜) ===== */
+var FOOD_KEY = 'eamon_food_reviews';
+var foodData = [];
+var foodFilter = { cat: 'all', list: 'all', city: 'all' };
+var foodFormState = { cat: '', subcat: '', list: '', stars: 0, photos: [], lat: 0, lng: 0 };
+
+var CAT_NAMES = { bar: '酒吧', cafe: '咖啡馆', food: '餐饮', fun: '娱乐' };
+
+function loadFoodReviews() {
+  if (useFirebase) {
+    /* Load from localStorage first for instant display */
+    try {
+      var cached = JSON.parse(localStorage.getItem(FOOD_KEY) || '[]');
+      if (Array.isArray(cached) && cached.length > 0) {
+        foodData = cached;
+        renderFoodBoard();
+        updateCityFilter();
+      }
+    } catch(e) {}
+
+    /* value: load ALL reviews at once */
+    db.ref('food_reviews').orderByChild('ts').on('value', function(snapshot) {
+      var val = snapshot.val();
+      if (val) {
+        foodData = Object.keys(val).map(function(key) {
+          var r = val[key];
+          r.id = key;
+          if (r.photos && !Array.isArray(r.photos)) r.photos = Object.values(r.photos);
+          if (!r.photos) r.photos = [];
+          return r;
+        }).sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+      } else {
+        foodData = [];
+      }
+      try { localStorage.setItem(FOOD_KEY, JSON.stringify(foodData)); } catch(e) {}
+      renderFoodBoard();
+      updateCityFilter();
+    });
+    /* child_changed for real-time updates */
+    db.ref('food_reviews').on('child_changed', function(snapshot) {
+      var r = snapshot.val();
+      r.id = snapshot.key;
+      if (r.photos && !Array.isArray(r.photos)) r.photos = Object.values(r.photos);
+      if (!r.photos) r.photos = [];
+      var idx = foodData.findIndex(function(f) { return f.id === r.id; });
+      if (idx >= 0) foodData[idx] = r;
+      renderFoodBoard();
+    });
+  } else {
+    try { foodData = JSON.parse(localStorage.getItem(FOOD_KEY) || '[]'); } catch(e) { foodData = []; }
+    if (!Array.isArray(foodData)) foodData = [];
+    renderFoodBoard();
+    updateCityFilter();
+  }
+}
+
+function updateCityFilter() {
+  var select = document.getElementById('foodCityFilter');
+  if (!select) return;
+  var cities = ['all'];
+  foodData.forEach(function(r) { if (r.city && cities.indexOf(r.city) === -1) cities.push(r.city); });
+  var currentVal = select.value;
+  select.innerHTML = '<option value="all">全部城市</option>' +
+    cities.filter(function(c) { return c !== 'all'; }).map(function(c) {
+      return '<option value="' + c + '"' + (c === currentVal ? ' selected' : '') + '>' + c + '</option>';
+    }).join('');
+  foodFilter.city = currentVal || 'all';
+}
+
+function renderFoodBoard() {
+  var board = document.getElementById('foodBoard');
+  if (!board) return;
+
+  var citySel = document.getElementById('foodCityFilter');
+  if (citySel) foodFilter.city = citySel.value;
+
+  var filtered = foodData.filter(function(r) {
+    if (foodFilter.cat !== 'all' && r.cat !== foodFilter.cat) return false;
+    if (foodFilter.list !== 'all' && r.list !== foodFilter.list) return false;
+    if (foodFilter.city !== 'all' && r.city !== foodFilter.city) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    board.innerHTML = '<div class="food-empty">还没有探店评价，快来添加第一条吧！</div>';
+    return;
+  }
+
+  board.innerHTML = filtered.map(function(r) {
+    var stars = '';
+    for (var i = 1; i <= 5; i++) {
+      stars += i <= r.stars ? '★' : '<span class="dim">★</span>';
+    }
+    var photos = '';
+    if (r.photos && r.photos.length > 0) {
+      var cls = r.photos.length > 1 ? 'multiple' : '';
+      photos = '<div class="food-card-photos ' + cls + '">' +
+        r.photos.map(function(p) { return '<img src="' + p + '" alt="" loading="lazy" />'; }).join('') +
+        '</div>';
+    }
+    var addr = '';
+    if (r.addr) {
+      var mapLink = r.lat && r.lng
+        ? 'https://uri.amap.com/marker?position=' + r.lng + ',' + r.lat + '&name=' + encodeURIComponent(r.name)
+        : 'https://www.amap.com/search?query=' + encodeURIComponent(r.name + ' ' + r.addr);
+      addr = '<div class="food-card-addr">📍 ' + escapeHtml(r.addr) +
+        ' <a href="' + mapLink + '" target="_blank">地图 →</a></div>';
+    }
+    var subcatTag = r.subcat ? '<span class="food-card-cat">' + escapeHtml(r.subcat) + '</span>' : '';
+    var cityTag = r.city ? '<span class="food-card-city">' + escapeHtml(r.city) + '</span>' : '';
+    var reviewShort = escapeHtml(r.review || '');
+    var isLong = reviewShort.length > 100;
+
+    return '<div class="food-card ' + r.list + '">' +
+      '<span class="food-card-badge ' + r.list + '">' + (r.list === 'red' ? '红榜' : '黑榜') + '</span>' +
+      photos +
+      '<div class="food-card-body">' +
+        '<div class="food-card-name">' + escapeHtml(r.name) + '</div>' +
+        '<div class="food-card-meta">' +
+          '<span class="food-card-cat">' + (CAT_NAMES[r.cat] || r.cat) + '</span>' +
+          subcatTag + cityTag +
+          '<span class="food-card-stars">' + stars + '</span>' +
+        '</div>' +
+        addr +
+        '<div class="food-card-review" id="review-' + r.id + '">' + reviewShort + '</div>' +
+        (isLong ? '<button class="food-card-expand" onclick="expandReview(\'' + r.id + '\')">展开全部</button>' : '') +
+        '<div class="food-card-footer">' +
+          '<span class="food-card-author">' + escapeHtml(r.author || '匿名访客') + '</span>' +
+          '<span class="food-card-time">' + formatFoodTime(r.ts) + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatFoodTime(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function expandReview(id) {
+  var el = document.getElementById('review-' + id);
+  if (!el) return;
+  el.classList.toggle('expanded');
+  var btn = el.nextElementSibling;
+  if (btn && btn.classList.contains('food-card-expand')) {
+    btn.textContent = el.classList.contains('expanded') ? '收起' : '展开全部';
+  }
+}
+
+/* Form toggle */
+function toggleFoodForm() {
+  var overlay = document.getElementById('foodFormOverlay');
+  if (!overlay) return;
+  overlay.classList.toggle('open');
+  if (overlay.classList.contains('open')) {
+    resetFoodForm();
+  }
+}
+
+function resetFoodForm() {
+  foodFormState = { cat: '', subcat: '', list: '', stars: 0, photos: [], lat: 0, lng: 0 };
+  document.getElementById('foodName').value = '';
+  document.getElementById('foodCity').value = '';
+  document.getElementById('foodAddr').value = '';
+  document.getElementById('foodReview').value = '';
+  document.getElementById('foodAuthor').value = '';
+  document.getElementById('foodCustomSubcat').value = '';
+  document.getElementById('foodCustomSubcat').style.display = 'none';
+  document.getElementById('foodSubcatRow').style.display = 'none';
+  document.getElementById('foodPhotoGrid').innerHTML = '';
+  document.getElementById('foodMapPreview').style.display = 'none';
+  document.querySelectorAll('.food-cat-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.food-subcat-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.food-listpick-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.food-stars-input .star').forEach(function(s) { s.classList.remove('active'); });
+}
+
+/* Category selection */
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('food-cat-btn')) {
+    document.querySelectorAll('.food-cat-btn').forEach(function(b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    foodFormState.cat = e.target.dataset.cat;
+    document.getElementById('foodSubcatRow').style.display = foodFormState.cat === 'food' ? 'block' : 'none';
+  }
+  if (e.target.classList.contains('food-subcat-btn')) {
+    document.querySelectorAll('.food-subcat-btn').forEach(function(b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    if (e.target.dataset.subcat === '__custom') {
+      document.getElementById('foodCustomSubcat').style.display = 'block';
+      foodFormState.subcat = '';
+    } else {
+      document.getElementById('foodCustomSubcat').style.display = 'none';
+      foodFormState.subcat = e.target.dataset.subcat;
+    }
+  }
+  if (e.target.classList.contains('food-listpick-btn')) {
+    document.querySelectorAll('.food-listpick-btn').forEach(function(b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    foodFormState.list = e.target.dataset.list;
+  }
+  if (e.target.classList.contains('food-filter-btn')) {
+    document.querySelectorAll('.food-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    foodFilter.cat = e.target.dataset.cat;
+    renderFoodBoard();
+  }
+  if (e.target.classList.contains('food-list-btn')) {
+    document.querySelectorAll('.food-list-btn').forEach(function(b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    foodFilter.list = e.target.dataset.list;
+    renderFoodBoard();
+  }
+});
+
+/* Star rating */
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('star') && e.target.closest('.food-stars-input')) {
+    var val = parseInt(e.target.dataset.val);
+    foodFormState.stars = val;
+    document.querySelectorAll('.food-stars-input .star').forEach(function(s) {
+      s.classList.toggle('active', parseInt(s.dataset.val) <= val);
+    });
+  }
+});
+
+/* Photo upload */
+var foodPhotoFiles = [];
+function handleFoodPhotos(input) {
+  var files = Array.from(input.files);
+  files.forEach(function(file) {
+    if (file.size > 3 * 1024 * 1024) {
+      alert('图片 ' + file.name + ' 超过3MB，请压缩后再上传');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      foodFormState.photos.push(e.target.result);
+      renderFoodPhotos();
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderFoodPhotos() {
+  var grid = document.getElementById('foodPhotoGrid');
+  if (!grid) return;
+  grid.innerHTML = foodFormState.photos.map(function(src, i) {
+    return '<div class="food-photo-item"><img src="' + src + '" /><button class="food-photo-remove" onclick="removeFoodPhoto(' + i + ')">×</button></div>';
+  }).join('');
+}
+
+function removeFoodPhoto(idx) {
+  foodFormState.photos.splice(idx, 1);
+  renderFoodPhotos();
+}
+
+/* Geolocation */
+function locateShop() {
+  var name = document.getElementById('foodName').value.trim();
+  var addr = document.getElementById('foodAddr').value.trim();
+  var city = document.getElementById('foodCity').value.trim();
+  if (!name && !addr) {
+    alert('请先输入店铺名称或地址');
+    return;
+  }
+
+  var query = [name, addr, city].filter(Boolean).join(' ');
+  /* Try browser geolocation first */
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      foodFormState.lat = pos.coords.latitude;
+      foodFormState.lng = pos.coords.longitude;
+      showMapPreview(pos.coords.latitude, pos.coords.longitude, name || addr || '当前位置');
+    }, function() {
+      /* Fallback: just create a map link from the address text */
+      var mapUrl = 'https://www.amap.com/search?query=' + encodeURIComponent(query);
+      showMapPreviewText('已根据地址生成地图链接', mapUrl);
+    }, { timeout: 5000 });
+  } else {
+    var mapUrl = 'https://www.amap.com/search?query=' + encodeURIComponent(query);
+    showMapPreviewText('已根据地址生成地图链接', mapUrl);
+  }
+}
+
+function showMapPreview(lat, lng, name) {
+  var preview = document.getElementById('foodMapPreview');
+  var info = document.getElementById('foodMapInfo');
+  var link = document.getElementById('foodMapLink');
+  info.textContent = '📍 ' + name + '（' + lat.toFixed(4) + ', ' + lng.toFixed(4) + '）';
+  link.href = 'https://uri.amap.com/marker?position=' + lng + ',' + lat + '&name=' + encodeURIComponent(name);
+  preview.style.display = 'block';
+}
+
+function showMapPreviewText(text, url) {
+  var preview = document.getElementById('foodMapPreview');
+  var info = document.getElementById('foodMapInfo');
+  var link = document.getElementById('foodMapLink');
+  info.textContent = '📍 ' + text;
+  link.href = url;
+  preview.style.display = 'block';
+}
+
+/* Submit review */
+function submitFoodReview() {
+  var name = document.getElementById('foodName').value.trim();
+  var city = document.getElementById('foodCity').value.trim();
+  var review = document.getElementById('foodReview').value.trim();
+  var author = document.getElementById('foodAuthor').value.trim() || '匿名访客';
+  var addr = document.getElementById('foodAddr').value.trim();
+  var customSubcat = document.getElementById('foodCustomSubcat').value.trim();
+
+  if (!name) { alert('请输入店铺名称'); return; }
+  if (!city) { alert('请输入所在城市'); return; }
+  if (!foodFormState.cat) { alert('请选择分类'); return; }
+  if (!foodFormState.list) { alert('请选择红榜或黑榜'); return; }
+  if (foodFormState.stars === 0) { alert('请选择星级评价'); return; }
+  if (!review) { alert('请输入评价内容'); return; }
+
+  var subcat = '';
+  if (foodFormState.cat === 'food') {
+    var activeSub = document.querySelector('.food-subcat-btn.active');
+    if (activeSub) {
+      if (activeSub.dataset.subcat === '__custom') {
+        subcat = customSubcat || '';
+      } else {
+        subcat = activeSub.dataset.subcat;
+      }
+    }
+  }
+
+  var reviewData = {
+    name: name,
+    city: city,
+    addr: addr,
+    cat: foodFormState.cat,
+    subcat: subcat,
+    list: foodFormState.list,
+    stars: foodFormState.stars,
+    review: review,
+    author: author,
+    photos: foodFormState.photos,
+    lat: foodFormState.lat || 0,
+    lng: foodFormState.lng || 0,
+    ts: Date.now()
+  };
+
+  var btn = document.querySelector('.food-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '发布中...';
+
+  if (useFirebase) {
+    var newRef = db.ref('food_reviews').push();
+    newRef.set(reviewData).then(function() {
+      btn.disabled = false;
+      btn.textContent = '发布评价';
+      toggleFoodForm();
+      /* Firebase on('value') will auto-refresh */
+    }).catch(function(err) {
+      console.error('Firebase save error:', err);
+      /* Fallback to localStorage */
+      foodData.unshift(reviewData);
+      try { localStorage.setItem(FOOD_KEY, JSON.stringify(foodData)); } catch(e) {}
+      btn.disabled = false;
+      btn.textContent = '发布评价';
+      toggleFoodForm();
+      renderFoodBoard();
+    });
+  } else {
+    foodData.unshift(reviewData);
+    try { localStorage.setItem(FOOD_KEY, JSON.stringify(foodData)); } catch(e) {}
+    btn.disabled = false;
+    btn.textContent = '发布评价';
+    toggleFoodForm();
+    renderFoodBoard();
+    updateCityFilter();
+  }
+}
+
+/* Close form on overlay click */
+document.addEventListener('DOMContentLoaded', function() {
+  var overlay = document.getElementById('foodFormOverlay');
+  if (overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) toggleFoodForm();
+    });
+  }
+  /* ESC to close */
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var ov = document.getElementById('foodFormOverlay');
+      if (ov && ov.classList.contains('open')) toggleFoodForm();
+    }
+  });
+  /* Load food reviews */
+  loadFoodReviews();
+});
+
 /* Run visitor tracking on page load */
 trackVisitor();
 
@@ -124,6 +531,8 @@ function initFirebaseListeners() {
     loadThoughts();
     console.log('Firebase ready, reloaded thoughts from cloud');
   }
+  /* Reload food reviews from Firebase */
+  if (typeof loadFoodReviews === 'function') loadFoodReviews();
 }
 
 /* ===== Top Nav scroll behavior ===== */

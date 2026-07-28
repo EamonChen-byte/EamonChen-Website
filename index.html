@@ -577,6 +577,136 @@
   </div>
 </section>
 
+<!-- ===== FOOD REVIEW (红黑榜) ===== -->
+<section class="s s-alt" id="food">
+  <div class="wrap">
+    <h2 class="stitle fade">探店红黑榜</h2>
+    <p class="notes-intro fade">咖、酒、餐红黑榜——所有人都可以上传探店评价，分享你的真实体验。</p>
+
+    <!-- 分类筛选 -->
+    <div class="food-filter-bar fade">
+      <select id="foodCityFilter" class="food-city-select" onchange="renderFoodBoard()">
+        <option value="all">全部城市</option>
+      </select>
+      <button class="food-filter-btn active" data-cat="all">全部</button>
+      <button class="food-filter-btn" data-cat="bar">酒吧</button>
+      <button class="food-filter-btn" data-cat="cafe">咖啡馆</button>
+      <button class="food-filter-btn" data-cat="food">餐饮</button>
+      <button class="food-filter-btn" data-cat="fun">娱乐</button>
+    </div>
+
+    <!-- 红黑榜切换 -->
+    <div class="food-list-bar fade">
+      <button class="food-list-btn active" data-list="all">全部</button>
+      <button class="food-list-btn red-btn" data-list="red">🔴 红榜</button>
+      <button class="food-list-btn black-btn" data-list="black">⚫ 黑榜</button>
+    </div>
+
+    <!-- 探店卡片列表 -->
+    <div class="food-board" id="foodBoard"></div>
+
+    <!-- 添加探店按钮 -->
+    <div class="food-add-section fade">
+      <button class="food-add-btn" id="foodAddBtn" onclick="toggleFoodForm()">+ 添加探店评价</button>
+    </div>
+
+    <!-- 探店表单（弹出） -->
+    <div class="food-form-overlay" id="foodFormOverlay">
+      <div class="food-form-modal">
+        <button class="food-form-close" onclick="toggleFoodForm()">×</button>
+        <h3 class="food-form-title">添加探店评价</h3>
+        <div class="food-form-body">
+          <div class="food-form-row">
+            <label>店铺名称 *</label>
+            <input type="text" id="foodName" placeholder="例如：Blue Bottle Coffee" />
+          </div>
+          <div class="food-form-row">
+            <label>所在城市 *</label>
+            <input type="text" id="foodCity" placeholder="例如：北京 / 上海 / 南宁" list="foodCityList" />
+            <datalist id="foodCityList">
+              <option value="北京"><option value="上海"><option value="广州"><option value="深圳">
+              <option value="杭州"><option value="成都"><option value="重庆"><option value="武汉">
+              <option value="南京"><option value="苏州"><option value="西安"><option value="长沙">
+              <option value="南宁"><option value="哈尔滨"><option value="齐齐哈尔"><option value="柳州">
+            </datalist>
+          </div>
+          <div class="food-form-row">
+            <label>店铺地址</label>
+            <div class="food-addr-row">
+              <input type="text" id="foodAddr" placeholder="详细地址（选填）" />
+              <button type="button" class="food-locate-btn" onclick="locateShop()">📍 定位</button>
+            </div>
+            <div class="food-map-preview" id="foodMapPreview" style="display:none">
+              <div class="food-map-info" id="foodMapInfo"></div>
+              <a id="foodMapLink" href="#" target="_blank" class="food-map-link">在地图中查看 →</a>
+            </div>
+          </div>
+          <div class="food-form-row">
+            <label>分类 *</label>
+            <div class="food-cat-tags" id="foodCatTags">
+              <button type="button" class="food-cat-btn" data-cat="bar">酒吧</button>
+              <button type="button" class="food-cat-btn" data-cat="cafe">咖啡馆</button>
+              <button type="button" class="food-cat-btn" data-cat="food">餐饮</button>
+              <button type="button" class="food-cat-btn" data-cat="fun">娱乐</button>
+            </div>
+          </div>
+          <div class="food-form-row food-subcat-row" id="foodSubcatRow" style="display:none">
+            <label>餐饮子类</label>
+            <div class="food-cat-tags" id="foodSubcatTags">
+              <button type="button" class="food-subcat-btn" data-subcat="韩餐">韩餐</button>
+              <button type="button" class="food-subcat-btn" data-subcat="泰餐">泰餐</button>
+              <button type="button" class="food-subcat-btn" data-subcat="日料">日料</button>
+              <button type="button" class="food-subcat-btn" data-subcat="东北菜">东北菜</button>
+              <button type="button" class="food-subcat-btn" data-subcat="烧烤">烧烤</button>
+              <button type="button" class="food-subcat-btn" data-subcat="粤菜">粤菜</button>
+              <button type="button" class="food-subcat-btn" data-subcat="火锅">火锅</button>
+              <button type="button" class="food-subcat-btn" data-subcat="__custom">自定义</button>
+            </div>
+            <input type="text" id="foodCustomSubcat" placeholder="输入自定义标签" style="display:none" />
+          </div>
+          <div class="food-form-row">
+            <label>红榜还是黑榜 *</label>
+            <div class="food-list-toggle">
+              <button type="button" class="food-listpick-btn red" data-list="red">🔴 红榜（推荐）</button>
+              <button type="button" class="food-listpick-btn black" data-list="black">⚫ 黑榜（避雷）</button>
+            </div>
+          </div>
+          <div class="food-form-row">
+            <label>星级评价 *</label>
+            <div class="food-stars-input" id="foodStarsInput">
+              <span class="star" data-val="1">★</span>
+              <span class="star" data-val="2">★</span>
+              <span class="star" data-val="3">★</span>
+              <span class="star" data-val="4">★</span>
+              <span class="star" data-val="5">★</span>
+            </div>
+          </div>
+          <div class="food-form-row">
+            <label>评价内容 *</label>
+            <textarea id="foodReview" rows="4" placeholder="分享你的真实体验..."></textarea>
+          </div>
+          <div class="food-form-row">
+            <label>上传照片</label>
+            <div class="food-photo-upload">
+              <div class="food-photo-grid" id="foodPhotoGrid"></div>
+              <button type="button" class="food-photo-add" onclick="document.getElementById('foodPhotoInput').click()">+ 添加照片</button>
+              <input type="file" id="foodPhotoInput" accept="image/*" multiple style="display:none" onchange="handleFoodPhotos(this)" />
+            </div>
+          </div>
+          <div class="food-form-row">
+            <label>你的昵称</label>
+            <input type="text" id="foodAuthor" placeholder="匿名访客" />
+          </div>
+        </div>
+        <div class="food-form-actions">
+          <button class="food-submit-btn" onclick="submitFoodReview()">发布评价</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
 <!-- ===== NOTES ===== -->
 <section class="s" id="notes">
   <div class="wrap">
