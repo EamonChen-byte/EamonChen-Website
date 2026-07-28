@@ -2000,8 +2000,6 @@ footer .footer-copy{opacity:0.7}
   </div>
 </div>
 
-<script src="https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-app-compat.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-database-compat.min.js"></script>
 <script>
 /* ===== Firebase Config (cross-device message board) ===== */
 const firebaseConfig = {
@@ -2015,13 +2013,37 @@ const firebaseConfig = {
 };
 let db = null;
 let useFirebase = false;
-try {
-  if (typeof firebase !== 'undefined' && firebaseConfig.databaseURL) {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    useFirebase = true;
-  }
-} catch(e) { console.warn('Firebase init skipped:', e.message); }
+
+/* Load Firebase SDK asynchronously — non-blocking */
+function loadFirebaseAsync() {
+  var s1 = document.createElement('script');
+  s1.src = 'https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-app-compat.min.js';
+  s1.onload = function() {
+    var s2 = document.createElement('script');
+    s2.src = 'https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-database-compat.min.js';
+    s2.onload = function() {
+      try {
+        if (typeof firebase !== 'undefined' && firebaseConfig.databaseURL) {
+          firebase.initializeApp(firebaseConfig);
+          db = firebase.database();
+          useFirebase = true;
+          initFirebaseListeners();
+        }
+      } catch(e) { console.warn('Firebase init skipped:', e.message); }
+    };
+    s2.onerror = function() { console.warn('Firebase database SDK failed to load'); };
+    document.head.appendChild(s2);
+  };
+  s1.onerror = function() { console.warn('Firebase app SDK failed to load'); };
+  document.head.appendChild(s1);
+}
+
+/* Deferred Firebase init — runs after page is fully interactive */
+if (document.readyState === 'complete') {
+  loadFirebaseAsync();
+} else {
+  window.addEventListener('load', loadFirebaseAsync);
+}
 
 /* ===== Visitor Tracking ===== */
 function trackVisitor() {
@@ -2072,6 +2094,19 @@ function initVisitorCounter() {
 
 /* Run visitor tracking on page load */
 trackVisitor();
+
+/* ===== Firebase Listeners Init (called after async Firebase load) ===== */
+function initFirebaseListeners() {
+  trackVisitor();
+  /* Reload notes with Firebase if available now */
+  var board = document.getElementById('messageBoard');
+  if (board) {
+    /* Clear existing local-only notes and reload from Firebase */
+    var cards = board.querySelectorAll('.note-card');
+    cards.forEach(function(c) { c.remove(); });
+  }
+  if (typeof loadNotes === 'function') loadNotes();
+}
 
 /* ===== Top Nav scroll behavior ===== */
 const topnav = document.getElementById('topnav');
