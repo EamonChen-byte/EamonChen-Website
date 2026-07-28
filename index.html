@@ -2829,14 +2829,30 @@ function updateNoteCard(note) {
 
 function loadNotes() {
   if (useFirebase) {
-    /* child_added: fires for all existing messages in order, then for new ones */
-    db.ref('messages').orderByChild('ts').on('child_added', function(snapshot) {
-      const note = snapshot.val();
-      note.id = snapshot.key;
-      if (note.replies && !Array.isArray(note.replies)) note.replies = Object.values(note.replies);
-      if (!note.replies) note.replies = [];
-      if (!note.emojis) note.emojis = {};
-      renderNoteCard(note);
+    var loadedOnce = false;
+    /* value: load ALL messages at once for complete initial render */
+    db.ref('messages').orderByChild('ts').on('value', function(snapshot) {
+      var board = document.getElementById('notesBoard');
+      if (!board) return;
+      /* Clear existing cards on first load or full refresh */
+      board.querySelectorAll('.note-card').forEach(function(c) { c.remove(); });
+      var val = snapshot.val();
+      if (val) {
+        /* Convert to array and sort by timestamp */
+        var notes = Object.keys(val).map(function(key) {
+          var note = val[key];
+          note.id = key;
+          if (note.replies && !Array.isArray(note.replies)) note.replies = Object.values(note.replies);
+          if (!note.replies) note.replies = [];
+          if (!note.emojis) note.emojis = {};
+          return note;
+        }).sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+        /* Render all notes at once */
+        notes.forEach(function(note) { renderNoteCard(note); });
+      }
+      /* Also cache to localStorage */
+      try { localStorage.setItem(NOTES_KEY, JSON.stringify(notesData)); } catch(e) {}
+      loadedOnce = true;
     });
     /* child_changed: fires when a message is updated (replies, emoji likes) */
     db.ref('messages').on('child_changed', function(snapshot) {
