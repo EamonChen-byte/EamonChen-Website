@@ -42,7 +42,7 @@ html{scrollbar-width:thin;scrollbar-color:#d2d2d7 var(--bg)}
 .wrap{max-width:980px;margin:0 auto;padding:0 24px}
 
 /* ===== Section ===== */
-.s{padding:140px 0;position:relative;overflow:hidden}
+.s{padding:80px 0;position:relative;overflow:hidden}
 .s-alt{background:#f5f5f7}
 /* subtle ambient glow */
 .s::before{
@@ -124,8 +124,9 @@ html{scrollbar-width:thin;scrollbar-color:#d2d2d7 var(--bg)}
 .hero-school{
   font-family:var(--font-cn);
   font-size:0.88rem;color:#86868b;letter-spacing:0.02em;
-  margin-bottom:28px;max-width:520px;line-height:1.7;
+  margin-bottom:28px;max-width:520px;line-height:1.9;
 }
+.hero-school p{margin-bottom:0.3em}
 .hero-tags{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:44px}
 .hero-tags .tag{
   font-family:var(--font-sans);font-size:0.8rem;
@@ -229,8 +230,8 @@ html{scrollbar-width:thin;scrollbar-color:#d2d2d7 var(--bg)}
   font-size:2.4rem;color:var(--accent);opacity:0.6;line-height:1;flex-shrink:0;
   letter-spacing:-0.03em;
 }
-.edu-chapter-title{font-family:var(--font-sans);font-weight:700;font-size:1.2rem;line-height:1.4;color:var(--text)}
-.edu-chapter-role{font-family:var(--font-mono);font-size:0.8rem;color:var(--text-dim);margin-top:6px;letter-spacing:0.02em}
+.edu-chapter-title{font-family:var(--font-cn);font-weight:700;font-size:1.2rem;line-height:1.4;color:var(--text)}
+.edu-chapter-role{font-family:var(--font-cn);font-size:0.85rem;color:var(--text-dim);margin-top:6px;letter-spacing:0.01em}
 .edu-chapter-body{color:var(--text-dim);font-size:1rem;line-height:1.95;margin-bottom:20px;padding-left:62px}
 .edu-chapter-body p{margin-bottom:0.9em}
 .edu-chapter-body strong{color:var(--text);font-weight:600}
@@ -1258,6 +1259,12 @@ footer .footer-copy{opacity:0.7}
 /* ===== Food Review (探店红黑榜) ===== */
 
 /* Stats summary */
+.food-banner{
+  background:linear-gradient(135deg,rgba(0,113,227,0.06),rgba(120,90,255,0.04));
+  border:1px solid var(--border-light);border-radius:var(--radius-lg);
+  padding:20px 28px;margin-bottom:32px;text-align:center;
+}
+.food-banner-text{font-size:0.92rem;color:var(--text-dim);line-height:1.8;max-width:600px;margin:0 auto}
 .food-stats{display:flex;justify-content:center;gap:32px;margin-bottom:32px;flex-wrap:wrap}
 .food-stat{text-align:center}
 .food-stat-num{font-family:var(--font-sans);font-size:1.8rem;font-weight:800;letter-spacing:-0.02em}
