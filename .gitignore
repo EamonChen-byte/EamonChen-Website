@@ -1,11 +1,5 @@
-# Reference images used during design phase
-ref_*.jpg
-ref_*.png
-
-# macOS system files
+deploy-package.zip
+deploy-package/
 .DS_Store
-
-# Editor files
-*.swp
-*.swo
-*~
+node_modules/
+*.log
