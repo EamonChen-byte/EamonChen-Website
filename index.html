@@ -409,7 +409,15 @@ html{scrollbar-width:thin;scrollbar-color:#d2d2d7 var(--bg)}
   background:var(--bg);position:relative;
   border:1px solid var(--border);
 }
-.memoir-video video{width:100%;display:block;outline:none}
+.memoir-video video{width:100%;display:block;outline:none;background:#000;min-height:120px}
+.memoir-video .video-loader{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  color:var(--text-dim);font-size:0.8rem;font-family:var(--font-sans);
+  padding:8px 20px;border:1px solid var(--border);border-radius:20px;
+  background:var(--bg-card);transition:opacity 0.3s;
+  pointer-events:none;animation:pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
 .memoir-video .video-caption{
   padding:12px 18px;background:var(--bg-card);color:var(--text-dim);
   font-size:0.76rem;letter-spacing:0.04em;
@@ -2818,7 +2826,7 @@ function openMemory(i) {
   const coverEl = document.getElementById('mCover');
   if (m.cover) {
     const pos = m.coverPos || '';
-    coverEl.innerHTML = `<div class="memoir-cover"><img src="${m.cover}" alt="" loading="lazy"${pos ? ` style="object-position:${pos}"` : ''} />${m.coverLabel ? `<span class="cover-label">${m.coverLabel}</span>` : ''}</div>`;
+    coverEl.innerHTML = `<div class="memoir-cover"><img src="${m.cover}" alt="" loading="lazy" decoding="async"${pos ? ` style="object-position:${pos}"` : ''} />${m.coverLabel ? `<span class="cover-label">${m.coverLabel}</span>` : ''}</div>`;
   } else {
     coverEl.innerHTML = '';
   }
@@ -2827,18 +2835,38 @@ function openMemory(i) {
   const articleEl = document.getElementById('mArticle');
   articleEl.innerHTML = m.content.map(c => {
     if (c.type === 'p') return `<p>${c.text}</p>`;
-    if (c.type === 'fig') return `<div class="memoir-fig"><img src="${c.src}" alt="" loading="lazy" /></div>`;
-    if (c.type === 'video') return `<div class="memoir-video"><video src="${c.src}" controls preload="metadata" playsinline></video>${c.caption ? `<div class="video-caption">${c.caption}</div>` : ''}</div>`;
+    if (c.type === 'fig') return `<div class="memoir-fig"><img src="${c.src}" alt="" loading="lazy" decoding="async" /></div>`;
+    if (c.type === 'video') return `<div class="memoir-video"><video data-src="${c.src}" controls preload="none" playsinline></video><div class="video-loader">视频加载中…</div>${c.caption ? `<div class="video-caption">${c.caption}</div>` : ''}</div>`;
     if (c.type === 'link') return `<a class="memoir-link" href="${c.href}" target="_blank" rel="noopener"><div class="link-icon">${c.icon || '🔗'}</div><div class="link-body"><div class="link-title">${c.title}</div><div class="link-desc">${c.desc || ''}</div></div><span class="link-arrow">→</span></a>`;
     return '';
   }).join('');
+
+  // Lazy-load videos via Intersection Observer
+  var lazyVideos = articleEl.querySelectorAll('video[data-src]');
+  if (lazyVideos.length > 0) {
+    var videoObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          var v = entry.target;
+          var loader = v.nextElementSibling;
+          v.src = v.dataset.src;
+          v.preload = 'metadata';
+          v.addEventListener('loadedmetadata', function() {
+            if (loader) loader.style.display = 'none';
+          }, { once: true });
+          videoObserver.unobserve(v);
+        }
+      });
+    }, { rootMargin: '200px' });
+    lazyVideos.forEach(function(v) { videoObserver.observe(v); });
+  }
 
   // Gallery for remaining photos
   const galleryEl = document.getElementById('mGallery');
   if (m.gallery && m.gallery.length > 0) {
     const cols = m.gallery.length >= 3 ? 'cols-3' : 'cols-2';
     galleryEl.innerHTML = `<div class="memoir-gallery ${cols}">${m.gallery.map(src =>
-      `<div class="memoir-fig"><img src="${src}" alt="" loading="lazy" /></div>`
+      `<div class="memoir-fig"><img src="${src}" alt="" loading="lazy" decoding="async" /></div>`
     ).join('')}</div>`;
   } else {
     galleryEl.innerHTML = '';
@@ -2867,7 +2895,7 @@ const playlist = [
 let currentTrack = 0;
 let isPlaying = false;
 const audio = new Audio();
-audio.preload = 'none';
+audio.preload = 'metadata';
 let audioLoaded = false;
 
 const pSong = document.getElementById('pSong');
@@ -2900,6 +2928,12 @@ function updateProgress() {
 }
 
 audio.addEventListener('timeupdate', updateProgress);
+audio.addEventListener('waiting', function() {
+  if (isPlaying && playBtn) playBtn.textContent = '⟳';
+});
+audio.addEventListener('playing', function() {
+  if (isPlaying && playBtn) playBtn.textContent = '⏸';
+});
 audio.addEventListener('ended', () => {
   // loop
   audio.currentTime = 0;
@@ -2924,12 +2958,22 @@ function play() {
     audio.src = playlist[currentTrack].src;
     audio.load();
     audioLoaded = true;
-    audio.oncanplaythrough = function() {
-      if (isPlaying) audio.play();
-      audio.oncanplaythrough = null;
+    if (playBtn) playBtn.textContent = '⟳';
+    audio.oncanplay = function() {
+      if (isPlaying) {
+        audio.play().catch(function(){});
+        if (playBtn) playBtn.textContent = '⏸';
+      }
+      audio.oncanplay = null;
+    };
+    audio.onerror = function() {
+      if (playBtn) playBtn.textContent = '▶';
+      isPlaying = false;
+      if (disc) disc.classList.remove('playing');
+      audio.oncanplay = null;
     };
   } else {
-    audio.play();
+    audio.play().catch(function(){});
   }
 }
 
@@ -2938,7 +2982,7 @@ function pause() {
   if (playBtn) playBtn.textContent = '▶';
   if (disc) disc.classList.remove('playing');
   audio.pause();
-  audio.oncanplaythrough = null;
+  audio.oncanplay = null;
 }
 
 function next() {
@@ -3260,6 +3304,10 @@ document.addEventListener('DOMContentLoaded', function(){
   if (cImg) {
     cImg.style.transition = 'opacity 0.15s ease, transform 0.25s cubic-bezier(0.25,1,0.5,1)';
   }
+  /* Set decoding=async on all lazy images for non-blocking decode */
+  document.querySelectorAll('img[loading="lazy"]:not([decoding])').forEach(function(img) {
+    img.decoding = 'async';
+  });
   /* Init visitor counter display */
   initVisitorCounter();
 });
