@@ -2147,7 +2147,18 @@ let thoughtsData = {};
 let currentEdit = null;
 let pendingAttachments = [];
 
-function getThoughts(cat) { return (thoughtsData[cat] || []).sort((a,b) => b.ts - a.ts); }
+/* Convert Firebase object-with-numeric-keys to array; pass-through if already array */
+function thoughtsAsArray(cat) {
+  var raw = thoughtsData[cat];
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'object') return Object.keys(raw).map(k => raw[k]).filter(p => p && p.ts);
+  return [];
+}
+
+function getThoughts(cat) {
+  return thoughtsAsArray(cat).sort((a,b) => b.ts - a.ts);
+}
 
 function saveThoughtsLocal() { localStorage.setItem(THOUGHTS_KEY, JSON.stringify(thoughtsData)); }
 
@@ -2225,9 +2236,18 @@ function loadThoughts() {
     renderAllPanels(); /* Show cached data immediately */
     db.ref('thoughts').on('value', function(snapshot) {
       const val = snapshot.val() || {};
-      thoughtsData = val;
-      /* Sync to localStorage as cache */
-      try { localStorage.setItem(THOUGHTS_KEY, JSON.stringify(val)); } catch(e) {}
+      /* Normalize: convert Firebase object-with-numeric-keys to arrays */
+      thoughtsData = {};
+      Object.keys(val).forEach(function(cat) {
+        var items = val[cat];
+        if (Array.isArray(items)) {
+          thoughtsData[cat] = items;
+        } else if (items && typeof items === 'object') {
+          thoughtsData[cat] = Object.keys(items).map(k => items[k]).filter(p => p && p.ts);
+        }
+      });
+      /* Sync normalized data to localStorage as cache */
+      try { localStorage.setItem(THOUGHTS_KEY, JSON.stringify(thoughtsData)); } catch(e) {}
       renderAllPanels();
     });
   } else {
@@ -2241,13 +2261,15 @@ function deleteThought(cat, ts) {
   if (!confirm('确定要删除这篇文章吗？')) return;
   if (useFirebase) {
     db.ref('thoughts/' + cat).once('value').then(function(snap) {
-      const arr = snap.val() || [];
+      const raw = snap.val();
+      var arr = Array.isArray(raw) ? raw : (raw ? Object.keys(raw).map(k => raw[k]) : []);
       const filtered = arr.filter(p => p.ts !== ts);
       db.ref('thoughts/' + cat).set(filtered);
     });
   } else {
-    if (!thoughtsData[cat]) return;
-    thoughtsData[cat] = thoughtsData[cat].filter(p => p.ts !== ts);
+    var arr = thoughtsAsArray(cat);
+    if (!arr.length) return;
+    thoughtsData[cat] = arr.filter(p => p.ts !== ts);
     saveThoughtsLocal();
     renderPanel(cat);
   }
@@ -2255,7 +2277,7 @@ function deleteThought(cat, ts) {
 }
 
 function editThought(cat, ts) {
-  const post = (thoughtsData[cat] || []).find(p => p.ts === ts);
+  const post = thoughtsAsArray(cat).find(p => p.ts === ts);
   if (!post) return;
   currentEdit = { cat, ts };
   document.querySelector('.writer-title').value = post.title;
@@ -2277,7 +2299,8 @@ function publishThought() {
   if (currentEdit) {
     if (useFirebase) {
       db.ref('thoughts/' + currentEdit.cat).once('value').then(function(snap) {
-        const arr = snap.val() || [];
+        const raw = snap.val();
+        var arr = Array.isArray(raw) ? raw : (raw ? Object.keys(raw).map(k => raw[k]) : []);
         const idx = arr.findIndex(p => p.ts === currentEdit.ts);
         if (idx !== -1) {
           arr[idx].title = title;
@@ -2289,7 +2312,7 @@ function publishThought() {
         showToast('修改成功');
       });
     } else {
-      const post = (thoughtsData[currentEdit.cat] || []).find(p => p.ts === currentEdit.ts);
+      const post = thoughtsAsArray(currentEdit.cat).find(p => p.ts === currentEdit.ts);
       if (post) {
         post.title = title;
         post.content = content;
@@ -2307,13 +2330,15 @@ function publishThought() {
     if (pendingAttachments.length) newPost.attachments = pendingAttachments;
     if (useFirebase) {
       db.ref('thoughts/' + cat).once('value').then(function(snap) {
-        const arr = snap.val() || [];
+        const raw = snap.val();
+        var arr = Array.isArray(raw) ? raw : (raw ? Object.keys(raw).map(k => raw[k]) : []);
         arr.push(newPost);
         db.ref('thoughts/' + cat).set(arr);
         showToast('发布成功');
       });
     } else {
       if (!thoughtsData[cat]) thoughtsData[cat] = [];
+      if (!Array.isArray(thoughtsData[cat])) thoughtsData[cat] = thoughtsAsArray(cat);
       thoughtsData[cat].push(newPost);
       saveThoughtsLocal();
       renderPanel(cat);
@@ -2375,7 +2400,7 @@ loadThoughts();
 
 /* ===== Thought Modal ===== */
 function openThought(cat, ts) {
-  const post = (thoughtsData[cat] || []).find(p => p.ts === ts);
+  const post = thoughtsAsArray(cat).find(p => p.ts === ts);
   if (!post) return;
   const d = new Date(post.ts);
   const dateStr = d.getFullYear() + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getDate()).padStart(2,'0');
