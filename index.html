@@ -625,6 +625,35 @@ html{scrollbar-width:thin;scrollbar-color:#d2d2d7 var(--bg)}
 }
 .thought-modal-actions button:hover{border-color:var(--accent);color:var(--accent)}
 
+/* Article comment count on cards */
+.thought-article-comments{font-size:0.75rem;color:var(--text-dim);margin-top:4px}
+
+/* Article comments section */
+.article-comments-section{margin-top:32px;padding-top:24px;border-top:1px solid var(--border-light)}
+.comments-title{font-size:1rem;font-weight:600;margin-bottom:16px}
+.comments-list{display:flex;flex-direction:column;gap:12px;margin-bottom:16px;max-height:300px;overflow-y:auto}
+.comments-empty{color:var(--text-dim);font-size:0.85rem;padding:12px 0;text-align:center}
+.comment-item{padding:12px 16px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-light)}
+.comment-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.comment-name{font-size:0.8rem;font-weight:600;color:var(--text)}
+.comment-time{font-size:0.7rem;color:var(--text-dim)}
+.comment-text{font-size:0.85rem;line-height:1.6;color:var(--text)}
+.comment-input-area{display:flex;flex-direction:column;gap:8px}
+.comment-input-area input{
+  padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:0.8rem;font-family:inherit;background:var(--card-bg);color:var(--text);
+}
+.comment-input-area textarea{
+  padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:0.85rem;font-family:inherit;background:var(--card-bg);color:var(--text);resize:vertical;
+}
+.comment-input-area button{
+  align-self:flex-end;padding:6px 20px;border-radius:var(--radius-sm);
+  background:var(--accent);color:#fff;border:none;font-size:0.8rem;
+  cursor:pointer;font-family:inherit;transition:opacity 0.2s;
+}
+.comment-input-area button:hover{opacity:0.85}
+
 /* Rich text editor toolbar */
 .editor-toolbar{
   display:flex;align-items:center;gap:4px;flex-wrap:wrap;
@@ -1091,6 +1120,7 @@ footer .footer-quote{
   margin-bottom:12px;letter-spacing:0.02em;
 }
 footer .footer-copy{opacity:0.7}
+.visitor-counter{margin-top:8px;font-size:0.75rem;opacity:0.5}
 
 /* ===== Toast ===== */
 .toast{
@@ -1557,7 +1587,7 @@ footer .footer-copy{opacity:0.7}
       <div class="thoughts-panel" id="panel-creator"></div>
       <div class="thoughts-panel" id="panel-campaign"></div>
     </div>
-    <div class="thoughts-admin-toggle fade"><button onclick="document.querySelector('.thoughts-writer').classList.toggle('open')">✍️ 写文章</button></div>
+    <div class="thoughts-admin-toggle fade"><button onclick="toggleWriter()">✍️ 写文章</button></div>
     <div class="thoughts-writer fade">
       <div class="writer-head">
         <input type="text" class="writer-title" placeholder="标题…" />
@@ -1942,6 +1972,7 @@ footer .footer-copy{opacity:0.7}
   <div class="wrap">
     <div class="footer-quote">愿我们都能在热爱里，闪闪发光 ✦</div>
     <p class="footer-copy">© 2026 陈一铭 Eamon · 用真心写的 readme</p>
+    <div id="visitorCounter" class="visitor-counter"></div>
   </div>
 </footer>
 
@@ -1956,6 +1987,7 @@ footer .footer-copy{opacity:0.7}
     <div class="thought-modal-body" id="thoughtModalBody"></div>
     <div id="thoughtModalAttachments"></div>
     <div class="thought-modal-actions" id="thoughtModalActions"></div>
+    <div id="thoughtModalComments"></div>
   </div>
 </div>
 
@@ -1981,6 +2013,56 @@ try {
     useFirebase = true;
   }
 } catch(e) { console.warn('Firebase init skipped:', e.message); }
+
+/* ===== Visitor Tracking ===== */
+function trackVisitor() {
+  if (!useFirebase) return;
+  var fingerprint = localStorage.getItem('eamon_visitor_id');
+  var isNewVisitor = !fingerprint;
+  if (!fingerprint) {
+    fingerprint = 'v' + Date.now() + Math.random().toString(36).substr(2, 6);
+    localStorage.setItem('eamon_visitor_id', fingerprint);
+  }
+  var now = new Date();
+  var dateStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  var timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  var referrer = document.referrer || '直接访问';
+  var screen = window.screen.width + 'x' + window.screen.height;
+  var visitorData = {
+    id: fingerprint,
+    date: dateStr,
+    time: timeStr,
+    ts: Date.now(),
+    referrer: referrer,
+    screen: screen,
+    ua: navigator.userAgent.substring(0, 100)
+  };
+  db.ref('visitors/' + fingerprint).set(visitorData);
+  db.ref('visitor_stats/total').transaction(function(current) { return (current || 0) + 1; });
+  if (isNewVisitor) {
+    db.ref('visitor_stats/unique').transaction(function(current) { return (current || 0) + 1; });
+  }
+  db.ref('visitor_stats/daily/' + dateStr).transaction(function(current) { return (current || 0) + 1; });
+}
+
+/* Display visitor count in footer */
+function initVisitorCounter() {
+  if (!useFirebase) return;
+  db.ref('visitor_stats').on('value', function(snapshot) {
+    var stats = snapshot.val() || {};
+    var total = stats.total || 0;
+    var unique = stats.unique || 0;
+    var todayStr = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0') + '-' + String(new Date().getDate()).padStart(2,'0');
+    var today = (stats.daily && stats.daily[todayStr]) || 0;
+    var counterEl = document.getElementById('visitorCounter');
+    if (counterEl) {
+      counterEl.innerHTML = '👁 今日 ' + today + ' · 累计 ' + total + ' 次访问';
+    }
+  });
+}
+
+/* Run visitor tracking on page load */
+trackVisitor();
 
 /* ===== Top Nav scroll behavior ===== */
 const topnav = document.getElementById('topnav');
@@ -2011,6 +2093,8 @@ window.addEventListener('scroll', () => {
 
 /* ===== Thoughts Blog (Firebase real-time + localStorage fallback) ===== */
 const THOUGHTS_KEY = 'eamon_thoughts';
+const ADMIN_PASSWORD = 'eamon2026';
+let isAdmin = sessionStorage.getItem('eamon_admin') === '1';
 let thoughtsData = {};
 let currentEdit = null;
 let pendingAttachments = [];
@@ -2062,13 +2146,18 @@ function renderPanel(cat) {
   panel.innerHTML = posts.map((p) => {
     const d = new Date(p.ts);
     const dateStr = d.getFullYear() + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getDate()).padStart(2,'0');
+    var actionsHtml = '';
+    if (isAdmin) {
+      actionsHtml = '<div class="thought-article-actions">' +
+        '<button onclick="event.stopPropagation();editThought(\'' + cat + '\',' + p.ts + ')">编辑</button>' +
+        '<button onclick="event.stopPropagation();deleteThought(\'' + cat + '\',' + p.ts + ')">删除</button>' +
+        '</div>';
+    }
+    var commentCount = (p.commentCount || 0);
     return '<div class="thought-article" onclick="openThought(\'' + cat + '\',' + p.ts + ')" data-ts="' + p.ts + '">' +
-      '<div class="thought-article-meta"><span>' + dateStr + '</span>' +
-      '<div class="thought-article-actions">' +
-      '<button onclick="event.stopPropagation();editThought(\'' + cat + '\',' + p.ts + ')">编辑</button>' +
-      '<button onclick="event.stopPropagation();deleteThought(\'' + cat + '\',' + p.ts + ')">删除</button>' +
-      '</div></div>' +
+      '<div class="thought-article-meta"><span>' + dateStr + '</span>' + actionsHtml + '</div>' +
       '<div class="thought-article-title"><span>' + p.title + '</span><span class="arrow">→</span></div>' +
+      (commentCount ? '<div class="thought-article-comments">💬 ' + commentCount + ' 条评论</div>' : '') +
     '</div>';
   }).join('');
 }
@@ -2247,10 +2336,20 @@ function openThought(cat, ts) {
     attEl.className = '';
     attEl.innerHTML = '';
   }
-  /* actions */
-  document.getElementById('thoughtModalActions').innerHTML =
-    '<button onclick="editThought(\'' + cat + '\',' + ts + ')">编辑</button>' +
-    '<button onclick="deleteThought(\'' + cat + '\',' + ts + ');closeThoughtModal()">删除</button>';
+  /* actions - only admin */
+  const actionsEl = document.getElementById('thoughtModalActions');
+  if (isAdmin) {
+    actionsEl.style.display = '';
+    actionsEl.innerHTML =
+      '<button onclick="editThought(\'' + cat + '\',' + ts + ')">编辑</button>' +
+      '<button onclick="deleteThought(\'' + cat + '\',' + ts + ');closeThoughtModal()">删除</button>' +
+      '<button onclick="adminLogout()" style="margin-left:auto;opacity:0.6">退出管理</button>';
+  } else {
+    actionsEl.style.display = 'none';
+    actionsEl.innerHTML = '';
+  }
+  /* comment section */
+  loadArticleComments(cat, ts);
   document.getElementById('thoughtModal').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -2258,6 +2357,106 @@ function openThought(cat, ts) {
 function closeThoughtModal() {
   document.getElementById('thoughtModal').classList.remove('open');
   document.body.style.overflow = '';
+}
+
+/* ===== Admin Login ===== */
+function adminLogin() {
+  var input = prompt('请输入管理密码：');
+  if (input === ADMIN_PASSWORD) {
+    isAdmin = true;
+    sessionStorage.setItem('eamon_admin', '1');
+    renderAllPanels();
+    showToast('管理员已登录');
+  } else if (input !== null) {
+    showToast('密码错误');
+  }
+}
+
+function adminLogout() {
+  isAdmin = false;
+  sessionStorage.removeItem('eamon_admin');
+  renderAllPanels();
+  closeThoughtModal();
+  showToast('已退出管理');
+}
+
+function toggleWriter() {
+  if (!isAdmin) {
+    adminLogin();
+    return;
+  }
+  document.querySelector('.thoughts-writer').classList.toggle('open');
+}
+
+/* ===== Article Comments ===== */
+function loadArticleComments(cat, ts) {
+  var commentEl = document.getElementById('thoughtModalComments');
+  if (!commentEl) return;
+  var commentId = cat + '_' + ts;
+  var html = '<div class="article-comments-section">';
+  html += '<h4 class="comments-title">💬 评论区</h4>';
+  html += '<div class="comments-list" id="commentsList"></div>';
+  html += '<div class="comment-input-area">';
+  html += '<input type="text" id="commentName" placeholder="你的名字（可选）" maxlength="20" />';
+  html += '<textarea id="commentText" placeholder="写点什么..." maxlength="500" rows="2"></textarea>';
+  html += '<button onclick="submitComment(\'' + cat + '\',' + ts + ')">发送</button>';
+  html += '</div>';
+  html += '</div>';
+  commentEl.innerHTML = html;
+  if (useFirebase) {
+    db.ref('article_comments/' + commentId).on('value', function(snapshot) {
+      var comments = snapshot.val() || {};
+      renderComments(comments);
+    });
+  } else {
+    var local = JSON.parse(localStorage.getItem('eamon_art_comments_' + commentId) || '{}');
+    renderComments(local);
+  }
+}
+
+function renderComments(comments) {
+  var listEl = document.getElementById('commentsList');
+  if (!listEl) return;
+  var arr = [];
+  if (Array.isArray(comments)) arr = comments;
+  else { for (var k in comments) arr.push(comments[k]); }
+  arr.sort(function(a,b) { return (a.ts||0) - (b.ts||0); });
+  if (!arr.length) {
+    listEl.innerHTML = '<div class="comments-empty">还没有评论，快来抢沙发～</div>';
+    return;
+  }
+  listEl.innerHTML = arr.map(function(c) {
+    var name = c.name ? c.name.replace(/</g,'&lt;') : '匿名访客';
+    var text = c.text ? c.text.replace(/</g,'&lt;') : '';
+    var d = new Date(c.ts || Date.now());
+    var timeStr = (d.getMonth()+1) + '月' + d.getDate() + '日 ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    return '<div class="comment-item">' +
+      '<div class="comment-head"><span class="comment-name">' + name + '</span><span class="comment-time">' + timeStr + '</span></div>' +
+      '<div class="comment-text">' + text + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function submitComment(cat, ts) {
+  var nameEl = document.getElementById('commentName');
+  var textEl = document.getElementById('commentText');
+  if (!textEl) return;
+  var name = nameEl ? nameEl.value.trim() : '';
+  var text = textEl.value.trim();
+  if (!text) { showToast('写点什么再发送呀'); return; }
+  var comment = { name: name, text: text, ts: Date.now() };
+  var commentId = cat + '_' + ts;
+  if (useFirebase) {
+    db.ref('article_comments/' + commentId).push().set(comment);
+  } else {
+    var local = JSON.parse(localStorage.getItem('eamon_art_comments_' + commentId) || '{}');
+    var key = 'c' + Date.now();
+    local[key] = comment;
+    localStorage.setItem('eamon_art_comments_' + commentId, JSON.stringify(local));
+    renderComments(local);
+  }
+  textEl.value = '';
+  showToast('评论已发送');
 }
 
 document.addEventListener('keydown', e => {
@@ -2876,6 +3075,23 @@ function calcDestinyScore(dateStr) {
 function startMatch() {
   document.getElementById('matchStart').style.display = 'none';
   document.getElementById('matchForm').classList.add('active');
+  /* Auto-match zodiac when birthday is entered */
+  var birthInput = document.getElementById('matchBirth');
+  if (birthInput && !birthInput.dataset.zodiacBound) {
+    birthInput.dataset.zodiacBound = '1';
+    birthInput.addEventListener('change', function() {
+      if (this.value) {
+        var autoZodiac = getZodiacFromDate(this.value);
+        if (autoZodiac) {
+          var zodiacSelect = document.getElementById('matchZodiac');
+          zodiacSelect.value = autoZodiac;
+          zodiacSelect.style.transition = 'background 0.3s';
+          zodiacSelect.style.background = 'rgba(0,113,227,0.1)';
+          setTimeout(function() { zodiacSelect.style.background = ''; }, 800);
+        }
+      }
+    });
+  }
 }
 
 function submitMatch() {
@@ -3044,6 +3260,8 @@ document.addEventListener('DOMContentLoaded', function(){
   if (cImg) {
     cImg.style.transition = 'opacity 0.15s ease, transform 0.25s cubic-bezier(0.25,1,0.5,1)';
   }
+  /* Init visitor counter display */
+  initVisitorCounter();
 });
 
 </script>
