@@ -3309,9 +3309,49 @@ document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('img[loading="lazy"]:not([decoding])').forEach(function(img) {
     img.decoding = 'async';
   });
+  /* Preload memoir images & videos during idle time */
+  if (window.requestIdleCallback) {
+    requestIdleCallback(preloadMemoirAssets, { timeout: 5000 });
+  } else {
+    setTimeout(preloadMemoirAssets, 3000);
+  }
   /* Init visitor counter display */
   initVisitorCounter();
 });
+
+/* ===== Memoir Asset Preloader ===== */
+function preloadMemoirAssets() {
+  var preloaded = window._memoirPreloaded || {};
+  window._memoirPreloaded = preloaded;
+  memories.forEach(function(m) {
+    if (m.cover && !preloaded[m.cover]) {
+      preloaded[m.cover] = new Image();
+      preloaded[m.cover].src = m.cover;
+    }
+    if (m.content) {
+      m.content.forEach(function(c) {
+        if (c.type === 'fig' && c.src && !preloaded[c.src]) {
+          preloaded[c.src] = new Image();
+          preloaded[c.src].src = c.src;
+        }
+        if (c.type === 'video' && c.src && !preloaded[c.src]) {
+          var v = document.createElement('video');
+          v.preload = 'metadata';
+          v.src = c.src;
+          preloaded[c.src] = v;
+        }
+      });
+    }
+    if (m.gallery) {
+      m.gallery.forEach(function(src) {
+        if (!preloaded[src]) {
+          preloaded[src] = new Image();
+          preloaded[src].src = src;
+        }
+      });
+    }
+  });
+}
 
 </script>
 
