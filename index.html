@@ -2101,11 +2101,15 @@ function initFirebaseListeners() {
   /* Reload notes with Firebase if available now */
   var board = document.getElementById('messageBoard');
   if (board) {
-    /* Clear existing local-only notes and reload from Firebase */
     var cards = board.querySelectorAll('.note-card');
     cards.forEach(function(c) { c.remove(); });
   }
   if (typeof loadNotes === 'function') loadNotes();
+  /* Reload thoughts from Firebase (will overwrite localStorage fallback) */
+  if (typeof loadThoughts === 'function') {
+    loadThoughts();
+    console.log('Firebase ready, reloaded thoughts from cloud');
+  }
 }
 
 /* ===== Top Nav scroll behavior ===== */
@@ -2213,9 +2217,17 @@ function renderAllPanels() {
 /* Load thoughts from Firebase (real-time) or localStorage (fallback) */
 function loadThoughts() {
   if (useFirebase) {
+    /* Always keep localStorage as offline cache */
+    try {
+      var cached = JSON.parse(localStorage.getItem(THOUGHTS_KEY) || '{}');
+      if (typeof cached === 'object' && !Array.isArray(cached)) thoughtsData = cached;
+    } catch(e) {}
+    renderAllPanels(); /* Show cached data immediately */
     db.ref('thoughts').on('value', function(snapshot) {
       const val = snapshot.val() || {};
       thoughtsData = val;
+      /* Sync to localStorage as cache */
+      try { localStorage.setItem(THOUGHTS_KEY, JSON.stringify(val)); } catch(e) {}
       renderAllPanels();
     });
   } else {
@@ -2973,7 +2985,7 @@ audio.addEventListener('playing', function() {
 audio.addEventListener('ended', () => {
   // loop
   audio.currentTime = 0;
-  audio.play();
+  audio.play().catch(function(e) { console.warn('Loop play failed:', e); });
 });
 
 function togglePlay() {
@@ -2986,30 +2998,58 @@ function togglePlay() {
 
 function play() {
   isPlaying = true;
-  if (playBtn) playBtn.textContent = '⏸';
   if (disc) disc.classList.add('playing');
   var pHint = document.getElementById('pHint');
   if (pHint) pHint.classList.add('hide');
-  if (!audioLoaded) {
-    audio.src = playlist[currentTrack].src;
-    audio.load();
-    audioLoaded = true;
+  if (!audioLoaded || audio.error) {
+    /* Reset and retry load */
+    audioLoaded = false;
     if (playBtn) playBtn.textContent = '⟳';
-    audio.oncanplay = function() {
-      if (isPlaying) {
-        audio.play().catch(function(){});
+    audio.removeAttribute('src');
+    audio.load(); /* Abort any previous load */
+    var playStarted = false;
+    function attemptPlay() {
+      if (playStarted || !isPlaying) return;
+      playStarted = true;
+      audio.play().then(function() {
         if (playBtn) playBtn.textContent = '⏸';
-      }
-      audio.oncanplay = null;
-    };
-    audio.onerror = function() {
+      }).catch(function(err) {
+        console.warn('Audio play failed:', err);
+        if (playBtn) playBtn.textContent = '▶';
+        isPlaying = false;
+        if (disc) disc.classList.remove('playing');
+      });
+    }
+    setTimeout(function() {
+      audio.src = playlist[currentTrack].src;
+      audio.load();
+      audioLoaded = true;
+    }, 50);
+    audio.addEventListener('canplaythrough', function onReady() {
+      audio.removeEventListener('canplaythrough', onReady);
+      if (isPlaying) attemptPlay();
+    });
+    /* Fallback: if canplaythrough doesn't fire in 4s, try anyway */
+    setTimeout(function() {
+      if (isPlaying && !playStarted && audio.readyState >= 2) attemptPlay();
+    }, 4000);
+    audio.addEventListener('error', function onErr() {
+      audio.removeEventListener('error', onErr);
+      console.error('Audio load error, code:', audio.error ? audio.error.code : 'unknown');
+      audioLoaded = false; /* Allow retry on next click */
       if (playBtn) playBtn.textContent = '▶';
       isPlaying = false;
       if (disc) disc.classList.remove('playing');
-      audio.oncanplay = null;
-    };
+    });
   } else {
-    audio.play().catch(function(){});
+    audio.play().then(function() {
+      if (playBtn) playBtn.textContent = '⏸';
+    }).catch(function(err) {
+      console.warn('Audio play failed:', err);
+      if (playBtn) playBtn.textContent = '▶';
+      isPlaying = false;
+      if (disc) disc.classList.remove('playing');
+    });
   }
 }
 
@@ -3018,7 +3058,6 @@ function pause() {
   if (playBtn) playBtn.textContent = '▶';
   if (disc) disc.classList.remove('playing');
   audio.pause();
-  audio.oncanplay = null;
 }
 
 function next() {
