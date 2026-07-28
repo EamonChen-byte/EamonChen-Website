@@ -188,8 +188,11 @@ function renderFoodBoard() {
     return true;
   });
 
+  /* Update stats and counts */
+  updateFoodStats();
+
   if (filtered.length === 0) {
-    board.innerHTML = '<div class="food-empty">还没有探店评价，快来添加第一条吧！</div>';
+    board.innerHTML = '<div class="food-empty"><div class="food-empty-icon">🍽️</div>还没有探店评价，快来添加第一条吧！</div>';
     return;
   }
 
@@ -200,20 +203,29 @@ function renderFoodBoard() {
     }
     var photos = '';
     if (r.photos && r.photos.length > 0) {
-      var cls = r.photos.length > 1 ? 'multiple' : '';
+      var photoCount = r.photos.length;
+      var cls = photoCount > 1 ? 'multiple' : '';
+      if (photoCount === 3) cls = 'multiple three';
+      var showPhotos = r.photos.slice(0, 3);
+      var moreLabel = photoCount > 3 ? '<div class="food-card-photo-more">+' + (photoCount - 3) + ' 张</div>' : '';
       photos = '<div class="food-card-photos ' + cls + '">' +
-        r.photos.map(function(p) { return '<img src="' + p + '" alt="" loading="lazy" />'; }).join('') +
+        showPhotos.map(function(p) { return '<img src="' + p + '" alt="" loading="lazy" />'; }).join('') +
+        moreLabel +
         '</div>';
+    } else {
+      /* No-photo placeholder using category icon */
+      var catIcon = { bar: '🍸', cafe: '☕', food: '🍽️', fun: '🎮' }[r.cat] || '📍';
+      photos = '<div class="food-card-nophoto">' + catIcon + '</div>';
     }
     var addr = '';
     if (r.addr) {
       var mapLink = r.lat && r.lng
         ? 'https://uri.amap.com/marker?position=' + r.lng + ',' + r.lat + '&name=' + encodeURIComponent(r.name)
         : 'https://www.amap.com/search?query=' + encodeURIComponent(r.name + ' ' + r.addr);
-      addr = '<div class="food-card-addr">📍 ' + escapeHtml(r.addr) +
+      addr = '<div class="food-card-addr">' + escapeHtml(r.addr) +
         ' <a href="' + mapLink + '" target="_blank">地图 →</a></div>';
     }
-    var subcatTag = r.subcat ? '<span class="food-card-cat">' + escapeHtml(r.subcat) + '</span>' : '';
+    var subcatTag = r.subcat ? '<span class="food-card-subcat">' + escapeHtml(r.subcat) + '</span>' : '';
     var cityTag = r.city ? '<span class="food-card-city">' + escapeHtml(r.city) + '</span>' : '';
     var reviewShort = escapeHtml(r.review || '');
     var isLong = reviewShort.length > 100;
@@ -238,6 +250,31 @@ function renderFoodBoard() {
       '</div>' +
     '</div>';
   }).join('');
+}
+
+function updateFoodStats() {
+  var total = foodData.length;
+  var redCount = foodData.filter(function(r) { return r.list === 'red'; }).length;
+  var blackCount = foodData.filter(function(r) { return r.list === 'black'; }).length;
+
+  var statsEl = document.getElementById('foodStats');
+  if (statsEl) {
+    if (total === 0) {
+      statsEl.innerHTML = '';
+    } else {
+      statsEl.innerHTML =
+        '<div class="food-stat"><div class="food-stat-num total">' + total + '</div><div class="food-stat-label">探店总数</div></div>' +
+        '<div class="food-stat"><div class="food-stat-num red">' + redCount + '</div><div class="food-stat-label">红榜推荐</div></div>' +
+        '<div class="food-stat"><div class="food-stat-num black">' + blackCount + '</div><div class="food-stat-label">黑榜避雷</div></div>';
+    }
+  }
+
+  var countAll = document.getElementById('countAll');
+  var countRed = document.getElementById('countRed');
+  var countBlack = document.getElementById('countBlack');
+  if (countAll) countAll.textContent = total;
+  if (countRed) countRed.textContent = redCount;
+  if (countBlack) countBlack.textContent = blackCount;
 }
 
 function escapeHtml(str) {

@@ -27,6 +27,10 @@
       <span class="topnav-divider"></span>
       <a href="#interests" class="topnav-link">生活碎片</a>
       <span class="topnav-divider"></span>
+      <a href="#food" class="topnav-link">探店红黑榜</a>
+      <span class="topnav-divider"></span>
+      <a href="#notes" class="topnav-link">留言板</a>
+      <span class="topnav-divider"></span>
       <a href="#match" class="topnav-link">测一测</a>
       <span class="topnav-divider"></span>
       <a href="#contact" class="topnav-link">联系我</a>
@@ -44,8 +48,8 @@
     <h1 class="hero-name fade">陈一铭</h1>
     <p class="hero-en fade">EAMON</p>
     <div class="hero-line fade"></div>
-    <p class="hero-tagline fade">你好，这是我的使用说明书</p>
-    <p class="hero-school fade">广西大学 · 新闻与传播 · 硕士 | 哈尔滨理工大学 · 软件工程 · 本科</p>
+    <p class="hero-tagline fade">欢迎你来到我的 readme 空间</p>
+    <p class="hero-school fade">作为工作伙伴，你可以看看我的运营工作思考；作为搭子，欢迎加入我的探店红黑榜；作为朋友，不妨测测我们的匹配度</p>
     <div class="hero-tags fade">
       <span class="tag">内容与创作者运营</span>
       <span class="tag">产品运营</span>
@@ -268,6 +272,8 @@
   <a href="#campus" class="sidenav-dot" data-section="campus" data-label="校园故事"></a>
   <a href="#thoughts" class="sidenav-dot" data-section="thoughts" data-label="运营思考"></a>
   <a href="#interests" class="sidenav-dot" data-section="interests" data-label="生活碎片"></a>
+  <a href="#food" class="sidenav-dot" data-section="food" data-label="探店红黑榜"></a>
+  <a href="#notes" class="sidenav-dot" data-section="notes" data-label="留言板"></a>
   <a href="#match" class="sidenav-dot" data-section="match" data-label="测一测"></a>
   <a href="#contact" class="sidenav-dot" data-section="contact" data-label="联系我"></a>
 </div>
@@ -464,7 +470,7 @@
           </div></div>
         </div>
       </div>
-      <div class="life-text foot" style="color:var(--accent)">咖、酒、餐红黑榜和排队攻略——一直在吃，一直在总结，但新店开得比我的笔记快。所以这份榜单的状态是：永久考察中。这不是拖延，这是对美食的尊重。</div>
+      <div class="life-text foot" style="color:var(--accent)">更多关于探店的测评与攻略，继续向后看吧，一起加入我的探店队伍中。咖、酒、餐红黑榜和排队攻略——一直在吃，一直在总结，但新店开得比我的笔记快。所以这份榜单的状态是：永久考察中。这不是拖延，这是对美食的尊重。</div>
     </div>
     <!-- 旅行 -->
     <div class="life-item fade">
@@ -578,28 +584,35 @@
 </section>
 
 <!-- ===== FOOD REVIEW (红黑榜) ===== -->
-<section class="s s-alt" id="food">
+<section class="s" id="food">
   <div class="wrap">
     <h2 class="stitle fade">探店红黑榜</h2>
-    <p class="notes-intro fade">咖、酒、餐红黑榜——所有人都可以上传探店评价，分享你的真实体验。</p>
+    <p class="notes-intro fade">所有人都可以上传探店评价——店名、照片、星级评分，红榜推荐或黑榜避雷，一起建一份真实的探店指南。</p>
 
-    <!-- 分类筛选 -->
-    <div class="food-filter-bar fade">
+    <!-- Stats summary -->
+    <div class="food-stats fade" id="foodStats"></div>
+
+    <!-- Filter toolbar -->
+    <div class="food-toolbar fade">
+      <div class="food-filter-group">
+        <span class="food-filter-label">分类</span>
+        <button class="food-filter-btn active" data-cat="all">全部</button>
+        <button class="food-filter-btn" data-cat="bar">酒吧</button>
+        <button class="food-filter-btn" data-cat="cafe">咖啡馆</button>
+        <button class="food-filter-btn" data-cat="food">餐饮</button>
+        <button class="food-filter-btn" data-cat="fun">娱乐</button>
+      </div>
+      <span class="food-filter-divider"></span>
       <select id="foodCityFilter" class="food-city-select" onchange="renderFoodBoard()">
         <option value="all">全部城市</option>
       </select>
-      <button class="food-filter-btn active" data-cat="all">全部</button>
-      <button class="food-filter-btn" data-cat="bar">酒吧</button>
-      <button class="food-filter-btn" data-cat="cafe">咖啡馆</button>
-      <button class="food-filter-btn" data-cat="food">餐饮</button>
-      <button class="food-filter-btn" data-cat="fun">娱乐</button>
     </div>
 
     <!-- 红黑榜切换 -->
     <div class="food-list-bar fade">
-      <button class="food-list-btn active" data-list="all">全部</button>
-      <button class="food-list-btn red-btn" data-list="red">🔴 红榜</button>
-      <button class="food-list-btn black-btn" data-list="black">⚫ 黑榜</button>
+      <button class="food-list-btn active" data-list="all">全部 <span class="food-list-count" id="countAll">0</span></button>
+      <button class="food-list-btn red-btn" data-list="red">🔴 红榜 <span class="food-list-count" id="countRed">0</span></button>
+      <button class="food-list-btn black-btn" data-list="black">⚫ 黑榜 <span class="food-list-count" id="countBlack">0</span></button>
     </div>
 
     <!-- 探店卡片列表 -->
@@ -708,7 +721,7 @@
 </section>
 
 <!-- ===== NOTES ===== -->
-<section class="s" id="notes">
+<section class="s s-alt" id="notes">
   <div class="wrap">
     <h2 class="stitle fade">留言板</h2>
     <p class="notes-intro fade">随便写点什么，想问的、想说的、或者单纯打个招呼都行。</p>
@@ -747,30 +760,6 @@
       <div class="submit-row">
         <input type="text" id="noteFrom" placeholder="你的名字（选填）" />
         <button onclick="addNote()">贴上去 →</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== CONTACT ===== -->
-<section class="s s-alt" id="contact">
-  <div class="wrap">
-    <h2 class="stitle fade">找到我</h2>
-    <div class="contact-grid">
-      <a href="mailto:chenyiming.07@qq.com" class="contact-card fade" style="text-decoration:none">
-        <div class="icon">📧</div>
-        <div class="label">Email</div>
-        <div class="val">chenyiming.07@qq.com</div>
-      </a>
-      <a href="tel:17645710825" class="contact-card fade" style="text-decoration:none">
-        <div class="icon">📱</div>
-        <div class="label">Phone</div>
-        <div class="val">176 4571 0825</div>
-      </a>
-      <div class="contact-card fade">
-        <div class="icon">💬</div>
-        <div class="label">WeChat</div>
-        <img src="assets/wechat-qr.webp" class="qr-img" alt="微信二维码" />
       </div>
     </div>
   </div>
@@ -856,6 +845,30 @@
           <div class="match-dimensions" id="matchDimensions"></div>
           <button class="match-retry-btn" onclick="resetMatch()">再测一次</button>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CONTACT ===== -->
+<section class="s s-alt" id="contact">
+  <div class="wrap">
+    <h2 class="stitle fade">找到我</h2>
+    <div class="contact-grid">
+      <a href="mailto:chenyiming.07@qq.com" class="contact-card fade" style="text-decoration:none">
+        <div class="icon">📧</div>
+        <div class="label">Email</div>
+        <div class="val">chenyiming.07@qq.com</div>
+      </a>
+      <a href="tel:17645710825" class="contact-card fade" style="text-decoration:none">
+        <div class="icon">📱</div>
+        <div class="label">Phone</div>
+        <div class="val">176 4571 0825</div>
+      </a>
+      <div class="contact-card fade">
+        <div class="icon">💬</div>
+        <div class="label">WeChat</div>
+        <img src="assets/wechat-qr.webp" class="qr-img" alt="微信二维码" />
       </div>
     </div>
   </div>
