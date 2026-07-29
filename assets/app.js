@@ -757,29 +757,55 @@ function publishThought() {
   const cat = document.querySelector('.writer-category').value;
   if (!title || !content || content === '<br>') { showToast('标题和内容不能为空'); return; }
   if (currentEdit) {
+    /* Capture edit context into locals BEFORE any async operations,
+       because currentEdit and pendingAttachments are cleared synchronously below */
+    var editCat = currentEdit.cat;
+    var editTs = currentEdit.ts;
+    var editAttachments = pendingAttachments.length ? JSON.parse(JSON.stringify(pendingAttachments)) : null;
+
     if (useFirebase) {
-      db.ref('thoughts/' + currentEdit.cat).once('value').then(function(snap) {
+      db.ref('thoughts/' + editCat).once('value').then(function(snap) {
         const raw = snap.val();
         var arr = Array.isArray(raw) ? raw : (raw ? Object.keys(raw).map(k => raw[k]) : []);
-        const idx = arr.findIndex(p => p.ts === currentEdit.ts);
+        const idx = arr.findIndex(p => p.ts === editTs);
         if (idx !== -1) {
           arr[idx].title = title;
           arr[idx].content = content;
-          arr[idx].attachments = pendingAttachments.length ? pendingAttachments : null;
+          arr[idx].attachments = editAttachments;
           arr[idx].updatedAt = Date.now();
-          db.ref('thoughts/' + currentEdit.cat).set(arr);
+          db.ref('thoughts/' + editCat).set(arr).then(function() {
+            /* Also update local cache for immediate feedback */
+            var localPost = thoughtsAsArray(editCat).find(p => p.ts === editTs);
+            if (localPost) {
+              localPost.title = title;
+              localPost.content = content;
+              localPost.attachments = editAttachments;
+              localPost.updatedAt = Date.now();
+              saveThoughtsLocal();
+            }
+            renderPanel(editCat);
+            showToast('修改成功');
+          }).catch(function(err) {
+            console.error('Firebase write failed:', err);
+            showToast('保存失败，请重试');
+          });
+        } else {
+          console.warn('Post not found for ts:', editTs);
+          showToast('未找到原文，请刷新后重试');
         }
-        showToast('修改成功');
+      }).catch(function(err) {
+        console.error('Firebase read failed:', err);
+        showToast('读取数据失败，请重试');
       });
     } else {
-      const post = thoughtsAsArray(currentEdit.cat).find(p => p.ts === currentEdit.ts);
+      const post = thoughtsAsArray(editCat).find(p => p.ts === editTs);
       if (post) {
         post.title = title;
         post.content = content;
-        post.attachments = pendingAttachments.length ? pendingAttachments : undefined;
+        post.attachments = editAttachments || undefined;
         post.updatedAt = Date.now();
         saveThoughtsLocal();
-        renderPanel(currentEdit.cat);
+        renderPanel(editCat);
         showToast('修改成功');
       }
     }
