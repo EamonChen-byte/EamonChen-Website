@@ -30,6 +30,7 @@ body{
 a{color:var(--accent);text-decoration:none;transition:color 0.2s}
 a:hover{color:var(--accent)}
 ::selection{background:var(--accent);color:#fff}
+.nowrap{white-space:nowrap;word-break:keep-all}
 
 /* ===== Scrollbar ===== */
 ::-webkit-scrollbar{width:6px}
